@@ -17,15 +17,10 @@ try:
 except Exception as e:
     st.error(f"⚠️ Error loading Google Sheets credentials: {e}")
     st.stop()
-    
+
 def get_participants():
     """Fetch participant picks from Google Sheets."""
     data = sheet.get_all_records()
-
-    # Debugging: Print raw Google Sheets data
-    st.write("**Raw Google Sheets Data:**")
-    st.dataframe(pd.DataFrame(data))  # Display as a table in Streamlit
-
     participants = {row['Participant']: [row['Team1'], row['Team2'], row['Team3'], row['Team4']] for row in data if row['Participant'].strip()}
     return participants
 
@@ -76,7 +71,7 @@ if 'last_updated' not in st.session_state:
 # Function to update and display the scoreboard
 def display_scoreboard():
     df = update_scores()
-    df = df[df["Participant"].notna() & (df["Participant"].str.strip() != "")]  # Remove empty rows based on Participant column
+    df = df.dropna().reset_index(drop=True)  # Ensure no empty rows and reset index
     
     # Create two columns for better spacing
     col1, col2 = st.columns([3, 2])
@@ -97,24 +92,19 @@ def update_scores():
     participants = get_participants()
     team_seeds = get_team_seeds()
     live_results, losers = get_live_results()
-
+    
     scores = []
     for participant, teams in participants.items():
         total_score = sum(live_results.get(team, 0) * team_seeds.get(team, 0) for team in teams)
         teams_with_seeds = "\n".join([f"<s style='color:red'><strike>{team}</strike></s> (Seed {team_seeds.get(team, 'N/A')})" if team in losers else f"{team} (Seed {team_seeds.get(team, 'N/A')})" for team in teams])
         scores.append([participant, total_score, teams_with_seeds])
-
+    
     df = pd.DataFrame(scores, columns=["Participant", "Score", "Teams (Seeds)"])
-
-    # Debugging: Print raw DataFrame before filtering
-    st.write("**Raw DataFrame Before Filtering:**")
-    st.dataframe(df)
-
-    df = df[df["Participant"].notna() & (df["Participant"].str.strip() != "")]  # Remove empty rows
+    df = df.dropna().reset_index(drop=True)  # Ensure no empty rows
     df = df.sort_values(by="Score", ascending=False)
     df["Place"] = df["Score"].rank(method="min", ascending=False).astype(int)  # Handle ranking with ties
     df = df[["Place", "Participant", "Score", "Teams (Seeds)"]]  # Reorder columns
-
+    
     return df
 
 # Display the scoreboard
@@ -130,3 +120,4 @@ for i in range(60, 0, -1):
     
 st.session_state['last_updated'] = time.time()
 st.rerun()
+
