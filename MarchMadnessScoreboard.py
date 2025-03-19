@@ -113,3 +113,5 @@ for i in range(60, 0, -1):
     
 st.session_state['last_updated'] = time.time()
 st.rerun()
+
+st.rerun()
