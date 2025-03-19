@@ -76,7 +76,7 @@ def display_scoreboard():
     col1, col2 = st.columns([3, 2])
     
     with col1:
-        st.dataframe(df, height=600, use_container_width=True)
+        st.dataframe(df.set_index("Place"), height=600, use_container_width=True)  # Remove default index and use Place as index
     
     with col2:
         # Generate a bar chart
@@ -100,7 +100,8 @@ def update_scores():
     
     df = pd.DataFrame(scores, columns=["Participant", "Score", "Teams (Seeds)"])
     df = df.sort_values(by="Score", ascending=False)
-    df["Rank"] = df["Score"].rank(method="min", ascending=False).astype(int)  # Handle ranking with ties
+    df["Place"] = df["Score"].rank(method="min", ascending=False).astype(int)  # Handle ranking with ties
+    df = df[["Place", "Participant", "Score", "Teams (Seeds)"]]  # Reorder columns
     
     return df
 
