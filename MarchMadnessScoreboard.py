@@ -10,7 +10,7 @@ import json
 
 # Load Google Sheets credentials from Streamlit Secrets
 try:
-    credentials_dict = json.loads(str(st.secrets["google_service_account"]))  # Ensure correct JSON format
+    credentials_dict = dict(st.secrets["google_service_account"])
     credentials = ServiceAccountCredentials.from_json_keyfile_dict(credentials_dict)
     gc = gspread.authorize(credentials)
     sheet = gc.open_by_url("https://docs.google.com/spreadsheets/d/1pQdTS-HiUcH_s40zcrT8yaJtOQZDTaNsnKka1s2hf7I/edit?gid=0#gid=0").sheet1
