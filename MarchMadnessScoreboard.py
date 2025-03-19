@@ -95,11 +95,22 @@ def update_scores():
     scores = []
     for participant, teams in participants.items():
         total_score = sum(live_results.get(team, 0) * team_seeds.get(team, 0) for team in teams)
-        teams_with_seeds = "\n".join([f"<s style='color:red'><strike>{team}</strike></s> (Seed {team_seeds.get(team, 'N/A')})" if team in losers else f"{team} (Seed {team_seeds.get(team, 'N/A')})" for team in teams])
+        teams_with_seeds = "\n".join([
+            f"<s style='color:red'><strike>{team}</strike></s> (Seed {team_seeds.get(team, 'N/A')})" if team in losers 
+            else f"{team} (Seed {team_seeds.get(team, 'N/A')})" for team in teams
+        ])
         scores.append([participant, total_score, teams_with_seeds])
     
     df = pd.DataFrame(scores, columns=["Participant", "Score", "Teams (Seeds)"])
+    # First, sort by Score in descending order.
     df = df.sort_values(by="Score", ascending=False)
+    
+    # Compute ranking (ties will have the same rank using method='min')
+    df['Place'] = df['Score'].rank(method='min', ascending=False).astype(int)
+    
+    # Now sort by Place (lowest rank first) and set it as the index
+    df = df.sort_values(by="Place")
+    df.set_index("Place", inplace=True)
     
     return df
 
