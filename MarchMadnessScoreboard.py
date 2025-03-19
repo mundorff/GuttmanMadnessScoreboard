@@ -61,7 +61,7 @@ def get_live_results():
 
 # Streamlit app setup
 st.set_page_config(layout="wide")  # Expands layout to utilize more space
-st.title("🏀 Guttman Madness Scoreboard 🏆")
+st.title("🏀 March Madness PickX Scoreboard 🏆")
 st.write("Scores update automatically every minute. Each win gives points equal to the team's seed.")
 
 # Initialize session state for tracking refresh time
@@ -100,6 +100,7 @@ def update_scores():
     
     df = pd.DataFrame(scores, columns=["Participant", "Score", "Teams (Seeds)"])
     df = df.sort_values(by="Score", ascending=False)
+    df["Rank"] = df["Score"].rank(method="min", ascending=False).astype(int)  # Handle ranking with ties
     
     return df
 
@@ -116,5 +117,3 @@ for i in range(60, 0, -1):
     
 st.session_state['last_updated'] = time.time()
 st.rerun()
-
-
