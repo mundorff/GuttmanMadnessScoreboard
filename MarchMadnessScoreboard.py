@@ -21,7 +21,7 @@ except Exception as e:
 def get_participants():
     """Fetch participant picks from Google Sheets."""
     data = sheet.get_all_records()
-    participants = {row['Participant']: [row['Team1'], row['Team2'], row['Team3'], row['Team4']] for row in data if row['Participant']}
+    participants = {row['Participant']: [row['Team1'], row['Team2'], row['Team3'], row['Team4']] for row in data if row['Participant'].strip()}
     return participants
 
 # Function to fetch team seeds from Google Sheets
@@ -61,7 +61,7 @@ def get_live_results():
 
 # Streamlit app setup
 st.set_page_config(layout="wide")  # Expands layout to utilize more space
-st.title("🏀 March Madness PickX Scoreboard 🏆")
+st.title("🏀 Guttman Madness Scoreboard 🏆")
 st.write("Scores update automatically every minute. Each win gives points equal to the team's seed.")
 
 # Initialize session state for tracking refresh time
@@ -71,9 +71,8 @@ if 'last_updated' not in st.session_state:
 # Function to update and display the scoreboard
 def display_scoreboard():
     df = update_scores()
-    df = df.dropna(subset=["Participant", "Score"])  # Ensure no empty rows
-    df = df[df["Participant"].str.strip() != ""]  # Remove rows where "Participant" is an empty string
-
+    df = df[df["Participant"].notna() & (df["Participant"].str.strip() != "")]  # Remove empty rows based on Participant column
+    
     # Create two columns for better spacing
     col1, col2 = st.columns([3, 2])
     
@@ -101,8 +100,7 @@ def update_scores():
         scores.append([participant, total_score, teams_with_seeds])
     
     df = pd.DataFrame(scores, columns=["Participant", "Score", "Teams (Seeds)"])
-    df = df.dropna(subset=["Participant", "Score"])  # Remove rows where "Participant" or "Score" is NaN
-    df = df[df["Participant"].str.strip() != ""]  # Remove rows where "Participant" is an empty string
+    df = df[df["Participant"].notna() & (df["Participant"].str.strip() != "")]  # Remove empty rows
     df = df.sort_values(by="Score", ascending=False)
     df["Place"] = df["Score"].rank(method="min", ascending=False).astype(int)  # Handle ranking with ties
     df = df[["Place", "Participant", "Score", "Teams (Seeds)"]]  # Reorder columns
