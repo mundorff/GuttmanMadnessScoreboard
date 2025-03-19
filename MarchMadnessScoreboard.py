@@ -21,7 +21,7 @@ except Exception as e:
 def get_participants():
     """Fetch participant picks from Google Sheets."""
     data = sheet.get_all_records()
-    participants = {row['Participant']: [row['Team1'], row['Team2'], row['Team3'], row['Team4']] for row in data if row['Participant'].strip()}
+    participants = {row['Participant']: [row['Team1'], row['Team2'], row['Team3'], row['Team4']] for row in data}
     return participants
 
 # Function to fetch team seeds from Google Sheets
@@ -42,7 +42,7 @@ def get_live_results():
     
     games = {}
     losers = set()
-    for game in soup.find_all('div', class_='Scoreboard'):
+    for game in soup.find_all('div', class_='Scoreboard'):  # Example class name, adjust as needed
         teams = game.find_all('span', class_='TeamName')
         scores = game.find_all('span', class_='Score')
         
@@ -60,23 +60,27 @@ def get_live_results():
     return games, losers
 
 # Streamlit app setup
-st.set_page_config(layout="wide")
+st.set_page_config(layout="wide")  # Expands layout to utilize more space
 st.title("🏀 March Madness PickX Scoreboard 🏆")
 st.write("Scores update automatically every minute. Each win gives points equal to the team's seed.")
 
+# Initialize session state for tracking refresh time
+if 'last_updated' not in st.session_state:
+    st.session_state['last_updated'] = time.time()
+
 # Function to update and display the scoreboard
 def display_scoreboard():
-    st.empty()  # Clears previous output before displaying the new scoreboard
     df = update_scores()
-    df = df.dropna().reset_index(drop=True)
     
+    # Create two columns for better spacing
     col1, col2 = st.columns([3, 2])
     
     with col1:
-        st.dataframe(df.set_index("Place"), height=600, use_container_width=True)
+        st.dataframe(df, height=600, use_container_width=True)
     
     with col2:
-        fig, ax = plt.subplots(figsize=(6, 6))
+        # Generate a bar chart
+        fig, ax = plt.subplots(figsize=(6, 6))  # Adjust size to prevent cramping
         ax.barh(df["Participant"], df["Score"], color='royalblue')
         ax.set_xlabel("Score")
         ax.set_title("March Madness PickX Leaderboard")
@@ -94,11 +98,8 @@ def update_scores():
         teams_with_seeds = "\n".join([f"<s style='color:red'><strike>{team}</strike></s> (Seed {team_seeds.get(team, 'N/A')})" if team in losers else f"{team} (Seed {team_seeds.get(team, 'N/A')})" for team in teams])
         scores.append([participant, total_score, teams_with_seeds])
     
-    df = pd.DataFrame(scores, columns=["Place", "Participant", "Score", "Teams (Seeds)"])
-    df = df.dropna().reset_index(drop=True)
+    df = pd.DataFrame(scores, columns=["Participant", "Score", "Teams (Seeds)"])
     df = df.sort_values(by="Score", ascending=False)
-    df["Place"] = df["Score"].rank(method="min", ascending=False).astype(int)
-    df = df[["Place", "Participant", "Score", "Teams (Seeds)"]]
     
     return df
 
@@ -112,5 +113,7 @@ refresh_timer = st.empty()
 for i in range(60, 0, -1):
     refresh_timer.markdown(f"<p style='text-align:center; color:gray; font-size:12px; position:fixed; bottom:10px; left:0; right:0;'>🔄 Next refresh: <strong>{i} seconds</strong></p>", unsafe_allow_html=True)
     time.sleep(1)
-
+    
+st.session_state['last_updated'] = time.time()
+st.rerun()
 
