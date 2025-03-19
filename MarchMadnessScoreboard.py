@@ -6,16 +6,14 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import matplotlib.pyplot as plt
 import time
+import json
 
-# Google Sheets setup
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1pQdTS-HiUcH_s40zcrT8yaJtOQZDTaNsnKka1s2hf7I/edit?gid=0#gid=0"
-SCOPES = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-CREDENTIALS_FILE = "bold-airlock-454218-c7-73408db0f5ff.json"  # Update with your credentials file
-
-# Authenticate Google Sheets
-credentials = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, SCOPES)
+# Load Google Sheets credentials from Streamlit Secrets
+credentials_dict = st.secrets["google_service_account"]
+credentials_json = json.dumps(credentials_dict)
+credentials = ServiceAccountCredentials.from_json_keyfile_dict(json.loads(credentials_json))
 gc = gspread.authorize(credentials)
-sheet = gc.open_by_url(SHEET_URL).sheet1
+sheet = gc.open_by_url("https://docs.google.com/spreadsheets/d/1pQdTS-HiUcH_s40zcrT8yaJtOQZDTaNsnKka1s2hf7I/edit?gid=0#gid=0").sheet1
 
 def get_participants():
     """Fetch participant picks from Google Sheets."""
@@ -27,13 +25,12 @@ def get_participants():
 @st.cache_data(ttl=300)
 def get_team_seeds():
     """Fetch team seeds from Google Sheets."""
-    seed_sheet = gc.open_by_url(SHEET_URL).worksheet('Team Seeds')
+    seed_sheet = gc.open_by_url("https://docs.google.com/spreadsheets/d/1pQdTS-HiUcH_s40zcrT8yaJtOQZDTaNsnKka1s2hf7I/edit?gid=0#gid=0").worksheet('Team Seeds')
     data = seed_sheet.get_all_records()
     seeds = {row['Team']: row['Seed'] for row in data}
     return seeds
 
 # Function to scrape live March Madness scores from CBS Sports
-# Removed caching to allow live updates
 def get_live_results():
     """Fetch live game results from CBS Sports."""
     url = "https://www.cbssports.com/college-basketball/scoreboard/"
