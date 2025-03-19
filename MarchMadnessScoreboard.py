@@ -100,7 +100,7 @@ def update_scores():
         scores.append([participant, total_score, teams_with_seeds])
     
     df = pd.DataFrame(scores, columns=["Participant", "Score", "Teams (Seeds)"])
-    df = df.dropna(how='all')  # Remove empty rows
+    df = df.replace("", float("nan")).dropna()  # Convert empty strings to NaN and then remove them
     df = df.sort_values(by="Score", ascending=False)
     df["Place"] = df["Score"].rank(method="min", ascending=False).astype(int)  # Handle ranking with ties
     df = df[["Place", "Participant", "Score", "Teams (Seeds)"]]  # Reorder columns
