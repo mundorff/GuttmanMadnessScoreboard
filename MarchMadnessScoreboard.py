@@ -61,7 +61,7 @@ def get_live_results():
 
 # Streamlit app setup
 st.set_page_config(layout="wide")  # Expands layout to utilize more space
-st.title("🏀 March Madness PickX Scoreboard 🏆")
+st.title("🏀 Guttman Madness Scoreboard 🏆")
 st.write("Scores update automatically every minute. Each win gives points equal to the team's seed.")
 
 # Initialize session state for tracking refresh time
