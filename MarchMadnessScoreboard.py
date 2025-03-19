@@ -8,15 +8,21 @@ import matplotlib.pyplot as plt
 import time
 import json
 
+# Debug: Print secrets to verify if they exist
+if "google_service_account" not in st.secrets:
+    st.error("⚠️ No Google Sheets credentials found! Make sure to add them in Streamlit Secrets.")
+    st.stop()
+
 # Load Google Sheets credentials from Streamlit Secrets
 try:
-    credentials_dict = dict(st.secrets["google_service_account"])
+    credentials_dict = json.loads(st.secrets["google_service_account"])  # Ensure JSON format
     credentials = ServiceAccountCredentials.from_json_keyfile_dict(credentials_dict)
     gc = gspread.authorize(credentials)
     sheet = gc.open_by_url("https://docs.google.com/spreadsheets/d/1pQdTS-HiUcH_s40zcrT8yaJtOQZDTaNsnKka1s2hf7I/edit?gid=0#gid=0").sheet1
 except Exception as e:
     st.error(f"⚠️ Error loading Google Sheets credentials: {e}")
     st.stop()
+
 
 def get_participants():
     """Fetch participant picks from Google Sheets."""
@@ -116,3 +122,4 @@ for i in range(60, 0, -1):
     
 st.session_state['last_updated'] = time.time()
 st.rerun()
+
