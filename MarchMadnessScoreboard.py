@@ -94,7 +94,7 @@ def update_scores():
         teams_with_seeds = "\n".join([f"<s style='color:red'><strike>{team}</strike></s> (Seed {team_seeds.get(team, 'N/A')})" if team in losers else f"{team} (Seed {team_seeds.get(team, 'N/A')})" for team in teams])
         scores.append([participant, total_score, teams_with_seeds])
     
-    df = pd.DataFrame(scores, columns=["Participant", "Score", "Teams (Seeds)"])
+    df = pd.DataFrame(scores, columns=["Place", "Participant", "Score", "Teams (Seeds)"])
     df = df.dropna().reset_index(drop=True)
     df = df.sort_values(by="Score", ascending=False)
     df["Place"] = df["Score"].rank(method="min", ascending=False).astype(int)
@@ -104,6 +104,14 @@ def update_scores():
 
 # Display the scoreboard
 display_scoreboard()
+
+# Timer container at the bottom of the page
+refresh_timer = st.empty()
+
+# Auto-refreshing the dashboard without stacking
+for i in range(60, 0, -1):
+    refresh_timer.markdown(f"<p style='text-align:center; color:gray; font-size:12px; position:fixed; bottom:10px; left:0; right:0;'>🔄 Next refresh: <strong>{i} seconds</strong></p>", unsafe_allow_html=True)
+    time.sleep(1)
 
 
 
