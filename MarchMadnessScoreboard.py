@@ -71,6 +71,7 @@ if 'last_updated' not in st.session_state:
 # Function to update and display the scoreboard
 def display_scoreboard():
     df = update_scores()
+    df = df.dropna(how='all')  # Remove empty rows
     
     # Create two columns for better spacing
     col1, col2 = st.columns([3, 2])
@@ -99,6 +100,7 @@ def update_scores():
         scores.append([participant, total_score, teams_with_seeds])
     
     df = pd.DataFrame(scores, columns=["Participant", "Score", "Teams (Seeds)"])
+    df = df.dropna(how='all')  # Remove empty rows
     df = df.sort_values(by="Score", ascending=False)
     df["Place"] = df["Score"].rank(method="min", ascending=False).astype(int)  # Handle ranking with ties
     df = df[["Place", "Participant", "Score", "Teams (Seeds)"]]  # Reorder columns
