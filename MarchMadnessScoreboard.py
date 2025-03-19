@@ -61,7 +61,7 @@ def get_live_results():
 
 # Streamlit app setup
 st.set_page_config(layout="wide")
-st.title("🏀 Guttman Madness Scoreboard 🏆")
+st.title("🏀 March Madness PickX Scoreboard 🏆")
 st.write("Scores update automatically every minute. Each win gives points equal to the team's seed.")
 
 # Function to update and display the scoreboard
@@ -105,7 +105,5 @@ def update_scores():
 # Display the scoreboard
 display_scoreboard()
 
-# Auto-refreshing the dashboard without stacking
-st.experimental_rerun()
 
 
