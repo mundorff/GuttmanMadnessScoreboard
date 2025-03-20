@@ -174,9 +174,10 @@ def update_scores():
             potential_remaining += potential_points
             
             if team in losers:
-                teams_with_seeds.append(f"(L){team} ({seed})")
+                teams_with_seeds.append(f'<span style="color: red; font-weight: bold;">(L)</span>{team} ({seed})')
             else:
                 teams_with_seeds.append(f"{team} ({seed})")
+
         
         max_possible = current_score + potential_remaining
         score_display = f"{current_score}/{max_possible}"
