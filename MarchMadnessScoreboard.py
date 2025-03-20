@@ -93,7 +93,7 @@ def get_all_espn_team_names():
     Returns a set of school names using the "location" field.
     """
     # Update the tournament_dates to match your tournament schedule (YYYYMMDD-YYYYMMDD)
-    tournament_dates = "20250318-20250407"  
+    tournament_dates = "20250320-20250407"  
     url = f"https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?tournament=ncaa&dates={tournament_dates}"
     response = requests.get(url)
     data = response.json()
