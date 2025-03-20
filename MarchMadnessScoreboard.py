@@ -237,6 +237,12 @@ if st.sidebar.checkbox("Show NCAA API Team Names"):
     st.write("### NCAA API Team Names")
     st.write(teams)
 
+if st.sidebar.checkbox("Debug One Game Object"):
+    url = "https://ncaa-api.henrygd.me/scoreboard/basketball-men/d1"
+    response = requests.get(url)
+    data = response.json()
+    if data.get("games"):
+        st.write("One game object:", data["games"][0])
 # -----------------------------
 # Main Display & Auto-Refresh
 # -----------------------------
