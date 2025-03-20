@@ -59,6 +59,17 @@ def get_live_results():
     
     return games, losers
 
+# Sidebar debugging option for cross-referencing team names
+if st.sidebar.checkbox("Show Cross-Reference Debug Info"):
+    missing_cbs, missing_google = cross_reference_team_names()
+    st.write("### Cross-Reference Check")
+    if missing_cbs:
+        st.write("Teams on CBS but missing in Google Sheet:", list(missing_cbs))
+    if missing_google:
+        st.write("Teams in Google Sheet but not on CBS:", list(missing_google))
+    if not missing_cbs and not missing_google:
+        st.write("All team names match!")
+
 # Streamlit app setup
 st.set_page_config(layout="wide")  # Expands layout to utilize more space
 st.title("🏀 Guttman Madness Scoreboard 🏆")
