@@ -211,36 +211,6 @@ def display_scoreboard():
         st.pyplot(fig)
 
 # -----------------------------
-# Sidebar Debug Options
-# -----------------------------
-if st.sidebar.checkbox("Show Cross-Reference Debug Info"):
-    missing_api, missing_sheet = cross_reference_team_names()
-    st.write("### Cross-Reference Check")
-    if missing_api:
-        st.write("Teams on NCAA API but missing in Google Sheet:", list(missing_api))
-    if missing_sheet:
-        st.write("Teams in Google Sheet but not on NCAA API:", list(missing_sheet))
-    if not missing_api and not missing_sheet:
-        st.write("All team names match!")
-
-if st.sidebar.checkbox("Show Sample NCAA API JSON Data"):
-    url = "https://ncaa-api.henrygd.me/scoreboard/basketball-men/d1"
-    response = requests.get(url)
-    try:
-        data = response.json()
-        st.write("### Sample NCAA API JSON Data")
-        st.json(data)
-    except Exception as e:
-        st.write("Error fetching or parsing NCAA API JSON data:", e)
-        st.write("Raw response text:", response.text)
-
-# New: Sidebar checkbox to list team names pulled from the API
-if st.sidebar.checkbox("Show NCAA API Team Names"):
-    teams = get_all_ncaa_team_names()
-    st.write("### NCAA API Team Names:")
-    st.write(list(teams))
-
-# -----------------------------
 # Main Display & Auto-Refresh
 # -----------------------------
 display_scoreboard()
