@@ -28,7 +28,9 @@ def get_participants():
 @st.cache_data(ttl=300)
 def get_team_seeds():
     """Fetch team seeds from Google Sheets."""
-    seed_sheet = gc.open_by_url("https://docs.google.com/spreadsheets/d/1pQdTS-HiUcH_s40zcrT8yaJtOQZDTaNsnKka1s2hf7I/edit?gid=0#gid=0").worksheet('Team Seeds')
+    seed_sheet = gc.open_by_url(
+        "https://docs.google.com/spreadsheets/d/1pQdTS-HiUcH_s40zcrT8yaJtOQZDTaNsnKka1s2hf7I/edit?gid=0#gid=0"
+    ).worksheet('Team Seeds')
     data = seed_sheet.get_all_records()
     seeds = {row['Team']: row['Seed'] for row in data}
     return seeds
@@ -40,13 +42,14 @@ def get_team_name(comp):
     """
     Extract the team name from a competitor's dictionary.
     Prioritize the "short" field found under the "names" dictionary.
-    Example competitor JSON:
+    For example, given:
       "names": {
          "char6": "CREIGH",
          "short": "Creighton",
          "seo": "creighton",
          "full": "Creighton University"
       }
+    it returns "Creighton".
     """
     names = comp.get("names", {})
     return names.get("short", "").strip()
@@ -56,7 +59,7 @@ def get_live_results():
     Fetch game results from the NCAA API endpoint for men's college basketball (D1).
     Uses the endpoint: https://ncaa-api.henrygd.me/scoreboard/basketball-men/d1
     Returns:
-      - games: a dictionary mapping team names (using the "short" field) to number of wins.
+      - games: a dictionary mapping team names (from the "short" field) to the number of wins.
       - losers: a set of teams that lost at least one game.
     """
     url = "https://ncaa-api.henrygd.me/scoreboard/basketball-men/d1"
@@ -70,8 +73,8 @@ def get_live_results():
     losers = set()
     games_list = data.get("games", [])
     
+    # Each game object contains an inner "game" dictionary.
     for game_obj in games_list:
-        # Each game object now has an inner "game" key
         game = game_obj.get("game", {})
         home = game.get("home", {})
         away = game.get("away", {})
@@ -86,8 +89,7 @@ def get_live_results():
             away_score = int(away.get("score", 0))
         except:
             away_score = 0
-        
-        # Determine winner based on score comparison
+
         if home_score > away_score:
             games[home_team] = games.get(home_team, 0) + 1
             losers.add(away_team)
@@ -137,7 +139,7 @@ def cross_reference_team_names():
     return teams_in_api_not_in_sheet, teams_in_sheet_not_in_api
 
 # -----------------------------
-# Streamlit App Display Functions
+# Streamlit App Display Functions with Pandas Styler
 # -----------------------------
 st.set_page_config(layout="wide")
 st.title("🏀 Guttman Madness Scoreboard 🏆")
@@ -151,13 +153,14 @@ def update_scores():
     team_seeds = get_team_seeds()
     live_results, losers = get_live_results()
     
-    scores = []
-    max_wins = 6  # assuming each team can win up to 6 games
+    max_wins = 6  # Assuming each team can win up to 6 games
+    score_data = []
     for participant, teams in participants.items():
         current_score = 0
         potential_remaining = 0
-        teams_with_seeds = []
-        for team in teams:
+        team_cols = {}
+        # Create separate columns for each team (Team 1, Team 2, etc.)
+        for i, team in enumerate(teams, start=1):
             seed = team_seeds.get(team, 'N/A')
             try:
                 seed_val = int(seed)
@@ -166,40 +169,48 @@ def update_scores():
             wins = live_results.get(team, 0)
             current_points = wins * seed_val
             current_score += current_points
-            
             if team in losers:
                 potential_points = 0
             else:
                 potential_points = seed_val * (max_wins - wins)
             potential_remaining += potential_points
-            
-            if team in losers:
-                teams_with_seeds.append(f"<s style='color:red'><strike>{team}</strike></s> ({seed})")
-            else:
-                teams_with_seeds.append(f"{team} ({seed})")
-        
+            team_cols[f"Team {i}"] = f"{team} ({seed})"
         max_possible = current_score + potential_remaining
         score_display = f"{current_score}/{max_possible}"
-        teams_with_seeds_str = "\n".join(teams_with_seeds)
-        scores.append([participant, current_score, max_possible, score_display, teams_with_seeds_str])
-    
-    df = pd.DataFrame(scores, columns=["Participant", "Current Score", "Max Score", "Score", "Teams (Seeds)"])
-    df = df.sort_values(by="Current Score", ascending=False)
+        row = {"Participant": participant,
+               "Score/Potential": score_display,
+               "Current Score": current_score,
+               "Max Score": max_possible}
+        row.update(team_cols)
+        score_data.append(row)
+    df = pd.DataFrame(score_data)
     df['Place'] = df['Current Score'].rank(method='min', ascending=False).astype(int)
-    df['Remaining'] = df["Max Score"] - df["Current Score"]
-    df = df.sort_values(by=["Place", "Remaining"], ascending=[True, False])
+    df = df.sort_values(by=["Place", "Current Score"], ascending=[True, False])
     df.set_index("Place", inplace=True)
-    df.rename(columns={"Score": "Score/Potential"}, inplace=True)
-    df = df.drop(columns=["Remaining"])
-    return df
+    return df, losers
 
 def display_scoreboard():
-    df = update_scores()
+    df, losers = update_scores()
     col1, col2 = st.columns([3, 2])
     with col1:
-        # Convert the dataframe to HTML and allow unsafe HTML rendering
-        html_table = df.to_html(escape=False, index=True)
-        st.markdown(html_table, unsafe_allow_html=True)
+        # Identify team columns (assume columns starting with "Team")
+        team_columns = [col for col in df.columns if col.startswith("Team")]
+        
+        # Define a function that applies a red strikethrough style if the team is in losers.
+        def make_style_team(losers_set):
+            def style_team(val):
+                # Extract team name (assumes format "TeamName (seed)")
+                team_name = val.split(" (")[0].strip()
+                if team_name in losers_set:
+                    return "text-decoration: line-through; color: red"
+                else:
+                    return ""
+            return style_team
+        
+        # Apply the styling function to each team column using Pandas Styler.
+        styled_df = df.style.applymap(make_style_team(losers), subset=team_columns)
+        # Display the styled HTML table
+        st.write(styled_df.to_html(escape=False), unsafe_allow_html=True)
     with col2:
         fig, ax = plt.subplots(figsize=(6, 6))
         ax.barh(df["Participant"], df["Max Score"], color='lightgrey')
@@ -235,7 +246,6 @@ if st.sidebar.checkbox("Show Sample NCAA API JSON Data"):
         st.write("Error fetching or parsing NCAA API JSON data:", e)
         st.write("Raw response text:", response.text)
 
-# New: Sidebar checkbox to list team names pulled from the API
 if st.sidebar.checkbox("Show NCAA API Team Names"):
     teams = get_all_ncaa_team_names()
     st.write("### NCAA API Team Names:")
