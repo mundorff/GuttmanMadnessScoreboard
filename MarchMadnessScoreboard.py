@@ -33,16 +33,18 @@ def get_team_seeds():
     seeds = {row['Team']: row['Seed'] for row in data}
     return seeds
 
-# Function to scrape live March Madness scores from CBS Sports
-# Function to fetch live March Madness scores from ESPN API
+# Function to fetch live game results from ESPN API and merge with cumulative results
 def get_live_results():
-    """Fetch live game results from ESPN API."""
-    url = "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard"
+    """Fetch live game results from ESPN API and merge with previous tournament results."""
+    url = "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?tournament=ncaa"
     response = requests.get(url)
     data = response.json()
     
-    games = {}
-    losers = set()
+    # Temporary dictionaries for today's results
+    current_games = {}
+    current_losers = set()
+    
+    # Parse through each event returned by ESPN
     for event in data.get("events", []):
         competitions = event.get("competitions", [])
         if not competitions:
@@ -59,33 +61,46 @@ def get_live_results():
         score1 = int(team1_info.get("score", "0"))
         score2 = int(team2_info.get("score", "0"))
         
-        # Use ESPN's "winner" flag if available; otherwise, compare scores.
-        if team1_info.get("winner", False):
-            games[team1_name] = games.get(team1_name, 0) + 1
-            losers.add(team2_name)
-        elif team2_info.get("winner", False):
-            games[team2_name] = games.get(team2_name, 0) + 1
-            losers.add(team1_name)
-        else:
-            if score1 > score2:
-                games[team1_name] = games.get(team1_name, 0) + 1
-                losers.add(team2_name)
-            elif score2 > score1:
-                games[team2_name] = games.get(team2_name, 0) + 1
-                losers.add(team1_name)
-    return games, losers
+        # Determine the winning team (using the ESPN "winner" flag if available)
+        if team1_info.get("winner", False) or (score1 > score2):
+            current_games[team1_name] = current_games.get(team1_name, 0) + 1
+            current_losers.add(team2_name)
+        elif team2_info.get("winner", False) or (score2 > score1):
+            current_games[team2_name] = current_games.get(team2_name, 0) + 1
+            current_losers.add(team1_name)
+    
+    # Merge today's results with cumulative results stored in session_state
+    if "all_results" not in st.session_state:
+        st.session_state["all_results"] = {"games": current_games, "losers": current_losers}
+    else:
+        # Retrieve previous cumulative results
+        all_games = st.session_state["all_results"].get("games", {})
+        all_losers = st.session_state["all_results"].get("losers", set())
+        # Merge: if a team appears today, add today's wins (or update, depending on your tournament logic)
+        # Here, we add wins cumulatively.
+        for team, wins in current_games.items():
+            all_games[team] = all_games.get(team, 0) + wins
+        # Update losers by union-ing the sets
+        all_losers = all_losers.union(current_losers)
+        # Save the updated cumulative results back into session_state
+        st.session_state["all_results"] = {"games": all_games, "losers": all_losers}
+        # Use the cumulative results as the current output
+        current_games = all_games
+        current_losers = all_losers
+        
+    return current_games, current_losers
 
 # Function to cross-reference team names between ESPN API data and your Google Sheet
 def cross_reference_team_names():
     """
-    Compare team names from ESPN API (scraped live) and your Google Sheet.
+    Compare team names from ESPN API (accumulated results) and your Google Sheet.
     Returns two sets:
       - Teams on ESPN but missing in your Google Sheet.
       - Teams in your Google Sheet but not on ESPN.
     """
     team_seeds = get_team_seeds()
-    # Normalize names: lower case and stripped of extra spaces.
-    google_team_names = {team.strip().lower() for team in team_seeds.keys()}
+    # Normalize names from the Google Sheet: lower case and stripped of extra spaces.
+    google_team_names = {team.strip().lower() for team in team_seeds.keys() if team.strip()}
     
     live_results, losers = get_live_results()
     espn_team_names = {team.strip().lower() for team in list(live_results.keys()) + list(losers)}
