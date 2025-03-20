@@ -42,10 +42,10 @@ def get_team_name(comp):
     Prioritize the "short" field found under the "names" dictionary.
     Example competitor JSON:
       "names": {
-         "char6": "CREIGH",
-         "short": "Creighton",
-         "seo": "creighton",
-         "full": "Creighton University"
+          "char6": "CREIGH",
+          "short": "Creighton",
+          "seo": "creighton",
+          "full": "Creighton University"
       }
     """
     names = comp.get("names", {})
@@ -204,10 +204,11 @@ def display_scoreboard():
     expected_team_cols = ["Team1", "Team2", "Team3", "Team4"]
     team_cols = [col for col in expected_team_cols if col in df.columns]
     
-    # Apply conditional styling using Pandas Styler on a copy of df.
-    styled_df = df.copy().style.applymap(lambda cell: style_team(cell, losers), subset=team_cols)
+    # Apply conditional styling using Pandas Styler. 
+    # Convert cell to string explicitly in the lambda.
+    styled_df = df.copy().style.applymap(lambda cell: style_team(str(cell), losers), subset=team_cols)
     
-    # Use to_html() to convert the styled DataFrame to HTML.
+    # Convert styled DataFrame to HTML and display with st.markdown.
     html_table = styled_df.to_html()
     
     col1, col2 = st.columns([3, 2])
@@ -266,3 +267,4 @@ for i in range(60, 0, -1):
     time.sleep(1)
 st.session_state['last_updated'] = time.time()
 st.rerun()
+
