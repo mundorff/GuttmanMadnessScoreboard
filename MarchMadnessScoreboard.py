@@ -204,12 +204,11 @@ def display_scoreboard():
     expected_team_cols = ["Team1", "Team2", "Team3", "Team4"]
     team_cols = [col for col in expected_team_cols if col in df.columns]
     
-    # Apply conditional styling using Pandas Styler.
-    # Make a copy to be safe.
+    # Apply conditional styling using Pandas Styler on a copy of df.
     styled_df = df.copy().style.applymap(lambda cell: style_team(cell, losers), subset=team_cols)
     
-    # Convert the styled DataFrame to HTML and render it.
-    html_table = styled_df.render()
+    # Use to_html() to convert the styled DataFrame to HTML.
+    html_table = styled_df.to_html()
     
     col1, col2 = st.columns([3, 2])
     with col1:
