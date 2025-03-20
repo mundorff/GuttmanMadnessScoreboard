@@ -34,49 +34,66 @@ def get_team_seeds():
     return seeds
 
 # Function to scrape live March Madness scores from CBS Sports
+# Function to fetch live March Madness scores from ESPN API
 def get_live_results():
-    """Fetch live game results from CBS Sports."""
-    url = "https://www.cbssports.com/college-basketball/ncaa-tournament/bracket/"
+    """Fetch live game results from ESPN API."""
+    url = "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard"
     response = requests.get(url)
-    soup = BeautifulSoup(response.text, 'html.parser')
+    data = response.json()
     
     games = {}
     losers = set()
-    for game in soup.find_all('div', class_='Scoreboard'):  # Example class name, adjust as needed
-        teams = game.find_all('span', class_='TeamName')
-        scores = game.find_all('span', class_='Score')
+    for event in data.get("events", []):
+        competitions = event.get("competitions", [])
+        if not competitions:
+            continue
+        competition = competitions[0]
+        competitors = competition.get("competitors", [])
+        if len(competitors) < 2:
+            continue
         
-        if teams and scores:
-            team1, team2 = teams[0].text.strip(), teams[1].text.strip()
-            score1 = int(scores[0].text) if scores[0].text.isdigit() else 0
-            score2 = int(scores[1].text) if scores[1].text.isdigit() else 0
+        team1_info = competitors[0]
+        team2_info = competitors[1]
+        team1_name = team1_info.get("team", {}).get("displayName", "").strip()
+        team2_name = team2_info.get("team", {}).get("displayName", "").strip()
+        score1 = int(team1_info.get("score", "0"))
+        score2 = int(team2_info.get("score", "0"))
+        
+        # Use ESPN's "winner" flag if available; otherwise, compare scores.
+        if team1_info.get("winner", False):
+            games[team1_name] = games.get(team1_name, 0) + 1
+            losers.add(team2_name)
+        elif team2_info.get("winner", False):
+            games[team2_name] = games.get(team2_name, 0) + 1
+            losers.add(team1_name)
+        else:
             if score1 > score2:
-                games[team1] = games.get(team1, 0) + 1
-                losers.add(team2)
-            else:
-                games[team2] = games.get(team2, 0) + 1
-                losers.add(team1)
-    
+                games[team1_name] = games.get(team1_name, 0) + 1
+                losers.add(team2_name)
+            elif score2 > score1:
+                games[team2_name] = games.get(team2_name, 0) + 1
+                losers.add(team1_name)
     return games, losers
 
+# Function to cross-reference team names between ESPN API data and your Google Sheet
 def cross_reference_team_names():
     """
-    Compare team names from CBS Sports (scraped live) and your Google Sheet.
+    Compare team names from ESPN API (scraped live) and your Google Sheet.
     Returns two sets:
-      - Teams on CBS but missing in your Google Sheet.
-      - Teams in your Google Sheet but not on CBS.
+      - Teams on ESPN but missing in your Google Sheet.
+      - Teams in your Google Sheet but not on ESPN.
     """
     team_seeds = get_team_seeds()
     # Normalize names: lower case and stripped of extra spaces.
     google_team_names = {team.strip().lower() for team in team_seeds.keys()}
     
     live_results, losers = get_live_results()
-    cbs_team_names = {team.strip().lower() for team in list(live_results.keys()) + list(losers)}
+    espn_team_names = {team.strip().lower() for team in list(live_results.keys()) + list(losers)}
     
-    teams_in_cbs_not_in_google = cbs_team_names - google_team_names
-    teams_in_google_not_in_cbs = google_team_names - cbs_team_names
+    teams_in_espn_not_in_google = espn_team_names - google_team_names
+    teams_in_google_not_in_espn = google_team_names - espn_team_names
     
-    return teams_in_cbs_not_in_google, teams_in_google_not_in_cbs
+    return teams_in_espn_not_in_google, teams_in_google_not_in_espn
 
 # Streamlit app setup
 st.set_page_config(layout="wide")  # Expands layout to utilize more space
@@ -185,13 +202,13 @@ def display_scoreboard():
 
 # --- Sidebar Debugging Option ---
 if st.sidebar.checkbox("Show Cross-Reference Debug Info"):
-    missing_cbs, missing_google = cross_reference_team_names()
+    missing_espn, missing_google = cross_reference_team_names()
     st.write("### Cross-Reference Check")
-    if missing_cbs:
-        st.write("Teams on CBS but missing in Google Sheet:", list(missing_cbs))
+    if missing_espn:
+        st.write("Teams on ESPN but missing in Google Sheet:", list(missing_espn))
     if missing_google:
-        st.write("Teams in Google Sheet but not on CBS:", list(missing_google))
-    if not missing_cbs and not missing_google:
+        st.write("Teams in Google Sheet but not on ESPN:", list(missing_google))
+    if not missing_espn and not missing_google:
         st.write("All team names match!")
 
 # Display the scoreboard
