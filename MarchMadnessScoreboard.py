@@ -28,15 +28,13 @@ def get_participants():
 @st.cache_data(ttl=300)
 def get_team_seeds():
     """Fetch team seeds from Google Sheets."""
-    seed_sheet = gc.open_by_url(
-        "https://docs.google.com/spreadsheets/d/1pQdTS-HiUcH_s40zcrT8yaJtOQZDTaNsnKka1s2hf7I/edit?gid=0#gid=0"
-    ).worksheet('Team Seeds')
+    seed_sheet = gc.open_by_url("https://docs.google.com/spreadsheets/d/1pQdTS-HiUcH_s40zcrT8yaJtOQZDTaNsnKka1s2hf7I/edit?gid=0#gid=0").worksheet('Team Seeds')
     data = seed_sheet.get_all_records()
     seeds = {row['Team']: row['Seed'] for row in data}
     return seeds
 
 # -----------------------------
-# NCAA API Functions using new endpoint
+# NCAA API Functions using new endpoint structure
 # -----------------------------
 def get_team_name(comp):
     """
@@ -44,10 +42,10 @@ def get_team_name(comp):
     Prioritize the "short" field found under the "names" dictionary.
     Example competitor JSON:
       "names": {
-          "char6": "CREIGH",
-          "short": "Creighton",
-          "seo": "creighton",
-          "full": "Creighton University"
+         "char6": "CREIGH",
+         "short": "Creighton",
+         "seo": "creighton",
+         "full": "Creighton University"
       }
     """
     names = comp.get("names", {})
@@ -58,7 +56,7 @@ def get_live_results():
     Fetch game results from the NCAA API endpoint for men's college basketball (D1).
     Uses the endpoint: https://ncaa-api.henrygd.me/scoreboard/basketball-men/d1
     Returns:
-      - games: a dictionary mapping team names (using the "short" field) to the number of wins.
+      - games: a dictionary mapping team names (using the "short" field) to number of wins.
       - losers: a set of teams that lost at least one game.
     """
     url = "https://ncaa-api.henrygd.me/scoreboard/basketball-men/d1"
@@ -72,7 +70,9 @@ def get_live_results():
     losers = set()
     games_list = data.get("games", [])
     
-    for game in games_list:
+    for game_obj in games_list:
+        # Each game object now has an inner "game" key
+        game = game_obj.get("game", {})
         home = game.get("home", {})
         away = game.get("away", {})
         home_team = get_team_name(home)
@@ -86,7 +86,8 @@ def get_live_results():
             away_score = int(away.get("score", 0))
         except:
             away_score = 0
-
+        
+        # Determine winner based on score comparison
         if home_score > away_score:
             games[home_team] = games.get(home_team, 0) + 1
             losers.add(away_team)
@@ -108,7 +109,8 @@ def get_all_ncaa_team_names():
     data = response.json()
     games_list = data.get("games", [])
     teams_set = set()
-    for game in games_list:
+    for game_obj in games_list:
+        game = game_obj.get("game", {})
         home = game.get("home", {})
         away = game.get("away", {})
         home_team = get_team_name(home)
@@ -231,18 +233,12 @@ if st.sidebar.checkbox("Show Sample NCAA API JSON Data"):
         st.write("Error fetching or parsing NCAA API JSON data:", e)
         st.write("Raw response text:", response.text)
 
-# New Sidebar Checkbox: Show team names pulled from the API
+# New: Sidebar checkbox to list team names pulled from the API
 if st.sidebar.checkbox("Show NCAA API Team Names"):
-    teams = sorted(get_all_ncaa_team_names())
-    st.write("### NCAA API Team Names")
-    st.write(teams)
+    teams = get_all_ncaa_team_names()
+    st.write("### NCAA API Team Names:")
+    st.write(list(teams))
 
-if st.sidebar.checkbox("Debug One Game Object"):
-    url = "https://ncaa-api.henrygd.me/scoreboard/basketball-men/d1"
-    response = requests.get(url)
-    data = response.json()
-    if data.get("games"):
-        st.write("One game object:", data["games"][0])
 # -----------------------------
 # Main Display & Auto-Refresh
 # -----------------------------
@@ -256,4 +252,3 @@ for i in range(60, 0, -1):
     time.sleep(1)
 st.session_state['last_updated'] = time.time()
 st.rerun()
-
