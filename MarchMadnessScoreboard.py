@@ -39,10 +39,15 @@ def get_team_seeds():
 def get_live_results():
     """
     Fetch game results from the ESPN bracket endpoint for the 2025 tournament.
-    Returns a dictionary mapping team name to wins and a set of teams that lost in any game.
+    Returns a dictionary mapping team names to wins and a set of teams that lost in any game.
+    Note: This function uses the bracket endpoint to get results. If the endpoint isn’t returning data,
+    you may need to adjust the endpoint or use another data source.
     """
     url = "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/bracket?season=2025"
     response = requests.get(url)
+    if response.status_code != 200:
+        st.error(f"Bracket endpoint returned error code {response.status_code}. No live results available.")
+        return {}, set()
     data = response.json()
     
     games = {}
@@ -77,7 +82,7 @@ def get_live_results():
                 except:
                     score2 = 0
 
-                # Determine the winner using the ESPN 'winner' flag if available
+                # Determine winner using the ESPN 'winner' flag if available or score comparison
                 if competitors[0].get("winner", False) or (score1 > score2):
                     games[team1_name] = games.get(team1_name, 0) + 1
                     losers.add(team2_name)
@@ -89,10 +94,14 @@ def get_live_results():
 def get_all_espn_team_names():
     """
     Fetch all team names from the ESPN bracket endpoint for the full tournament.
-    Returns a set of school names (using the 'location' field).
+    Returns a set of school names using the 'location' field.
+    If the endpoint returns an error (e.g. 404), log the error and return an empty set.
     """
     url = "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/bracket?season=2025"
     response = requests.get(url)
+    if response.status_code != 200:
+        st.error(f"Bracket endpoint returned error code {response.status_code}. Unable to fetch full team list.")
+        return set()
     data = response.json()
     teams_set = set()
     regions = data.get("regions", [])
@@ -160,7 +169,6 @@ def update_scores():
             current_points = wins * seed_val
             current_score += current_points
             
-            # Calculate potential additional points if team hasn't been eliminated.
             if team in losers:
                 potential_points = 0
             else:
