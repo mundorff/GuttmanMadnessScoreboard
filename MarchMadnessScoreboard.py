@@ -290,6 +290,16 @@ if st.sidebar.checkbox("Show Cross-Reference Debug Info"):
     if not missing_espn and not missing_google:
         st.write("All team names match!")
 
+if st.sidebar.checkbox("Show Sample ESPN API Data"):
+    url = "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?tournament=ncaa"
+    response = requests.get(url)
+    try:
+        data = response.json()
+        st.write("### Sample ESPN API Data")
+        st.json(data)
+    except Exception as e:
+        st.write("Error fetching or parsing API data:", e)
+
 
 # Display the scoreboard
 display_scoreboard()
