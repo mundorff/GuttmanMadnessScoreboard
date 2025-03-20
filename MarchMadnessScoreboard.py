@@ -69,36 +69,6 @@ if 'last_updated' not in st.session_state:
     st.session_state['last_updated'] = time.time()
 
 # Function to update and display the scoreboard
-def display_scoreboard():
-    df = update_scores()
-    
-    # Create two columns for the table and the chart.
-    col1, col2 = st.columns([3, 2])
-    
-    with col1:
-        # Display only the selected columns in the table.
-        st.dataframe(df[["Participant", "Score", "Teams (Seeds)"]], height=600, use_container_width=True)
-    
-    with col2:
-        # Create a horizontal bar chart with overlaying bars.
-        fig, ax = plt.subplots(figsize=(6, 6))
-        
-        # Grey bar for the maximum (potential) score.
-        ax.barh(df["Participant"], df["Max Score"], color='lightgrey')
-        
-        # Overlay the green bar for the current score.
-        ax.barh(df["Participant"], df["Current Score"], color='green')
-        
-        ax.set_xlabel("Points")
-        ax.set_title("March Madness PickX Progress")
-        
-        # Ensure the x-axis always starts at 0 and extends to the highest Max Score.
-        max_val = df["Max Score"].max() if not df["Max Score"].empty else 1
-        ax.set_xlim(0, max_val)
-        
-        st.pyplot(fig)
-
-# Function to update scores
 def update_scores():
     participants = get_participants()
     team_seeds = get_team_seeds()
@@ -149,7 +119,40 @@ def update_scores():
     df = df.sort_values(by="Place")
     df.set_index("Place", inplace=True)
     
+    # Rename the score column to "Score/Potential"
+    df.rename(columns={"Score": "Score/Potential"}, inplace=True)
+    
     return df
+
+def display_scoreboard():
+    df = update_scores()
+    
+    # Create two columns for the table and the chart.
+    col1, col2 = st.columns([3, 2])
+    
+    with col1:
+        # Display only the selected columns in the table with the updated header.
+        st.dataframe(df[["Participant", "Score/Potential", "Teams (Seeds)"]], height=600, use_container_width=True)
+    
+    with col2:
+        # Create a horizontal bar chart with overlaying bars.
+        fig, ax = plt.subplots(figsize=(6, 6))
+        
+        # Grey bar for the maximum (potential) score.
+        ax.barh(df["Participant"], df["Max Score"], color='lightgrey')
+        
+        # Overlay the green bar for the current score.
+        ax.barh(df["Participant"], df["Current Score"], color='green')
+        
+        ax.set_xlabel("Points")
+        ax.set_title("March Madness PickX Progress")
+        
+        # Ensure the x-axis always starts at 0 and extends to the highest Max Score.
+        max_val = df["Max Score"].max() if not df["Max Score"].empty else 1
+        ax.set_xlim(0, max_val)
+        
+        st.pyplot(fig)
+
 
 # Display the scoreboard
 display_scoreboard()
