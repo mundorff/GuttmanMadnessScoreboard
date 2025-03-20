@@ -197,9 +197,7 @@ def display_scoreboard():
     df = update_scores()
     col1, col2 = st.columns([3, 2])
     with col1:
-        # Convert the dataframe to HTML and allow unsafe HTML rendering
-        html_table = df.to_html(escape=False, index=True)
-        st.markdown(html_table, unsafe_allow_html=True)
+        st.dataframe(df[["Participant", "Score/Potential", "Teams (Seeds)"]], height=600, use_container_width=True)
     with col2:
         fig, ax = plt.subplots(figsize=(6, 6))
         ax.barh(df["Participant"], df["Max Score"], color='lightgrey')
