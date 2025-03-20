@@ -159,6 +159,9 @@ def display_scoreboard():
         max_val = df["Max Score"].max() if not df["Max Score"].empty else 1
         ax.set_xlim(0, max_val)
         
+        # Invert y-axis so that the highest rank (Place 1) is at the top.
+        ax.invert_yaxis()
+        
         st.pyplot(fig)
 
 # Display the scoreboard
