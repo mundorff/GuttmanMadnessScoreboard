@@ -35,27 +35,37 @@ def get_team_seeds():
 
 def get_live_results():
     """
-    Fetch live game results from ESPN API, skipping first-four play-in games,
-    and merge only new game results (based on event IDs) with cumulative results.
+    Fetch live game results from ESPN API, avoid duplicate counting,
+    and skip first-four play-in games based on round information.
     """
     url = "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?tournament=ncaa"
     response = requests.get(url)
     data = response.json()
     
-    # Initialize the set of processed event IDs if it doesn't exist.
+    # Initialize processed event IDs if not present
     if "processed_event_ids" not in st.session_state:
         st.session_state["processed_event_ids"] = set()
     
-    # Dictionaries for new results (only for games not yet processed)
+    # New results for games not yet processed
     new_games = {}
     new_losers = set()
+    
+    # Helper: Get team name with fallback
+    def get_team_name(competitor):
+        team = competitor.get("team", {})
+        # Try to use the 'location' field (school name only)
+        team_name = team.get("location", "").strip()
+        if not team_name:
+            # Fallback to displayName if location is empty
+            team_name = team.get("displayName", "").strip()
+        return team_name
     
     for event in data.get("events", []):
         event_id = event.get("id")
         if not event_id:
             continue
         
-        # Skip if we've already processed this game
+        # Skip already processed events
         if event_id in st.session_state["processed_event_ids"]:
             continue
         
@@ -64,11 +74,13 @@ def get_live_results():
             continue
         competition = competitions[0]
         
-        # Check if this is a first-four play-in game.
-        # (Adjust the field and check based on the actual API structure.)
-        round_info = competition.get("round", "")
-        if round_info and "first four" in round_info.lower():
-            # Mark this event as processed and skip it.
+        # Check for round information to filter out first-four games.
+        round_info = competition.get("round", {})
+        round_name = ""
+        if isinstance(round_info, dict):
+            round_name = round_info.get("name", "").lower()
+        # If round name indicates first-four (adjust as needed), skip this event.
+        if "first four" in round_name:
             st.session_state["processed_event_ids"].add(event_id)
             continue
         
@@ -76,26 +88,30 @@ def get_live_results():
         if len(competitors) < 2:
             continue
         
-        team1_info = competitors[0]
-        team2_info = competitors[1]
-        # Use the "location" field for school name only
-        team1_name = team1_info.get("team", {}).get("location", "").strip()
-        team2_name = team2_info.get("team", {}).get("location", "").strip()
-        score1 = int(team1_info.get("score", "0"))
-        score2 = int(team2_info.get("score", "0"))
+        team1_name = get_team_name(competitors[0])
+        team2_name = get_team_name(competitors[1])
         
-        # Determine the winning team, using the ESPN "winner" flag if available.
-        if team1_info.get("winner", False) or (score1 > score2):
+        try:
+            score1 = int(competitors[0].get("score", "0"))
+        except ValueError:
+            score1 = 0
+        try:
+            score2 = int(competitors[1].get("score", "0"))
+        except ValueError:
+            score2 = 0
+        
+        # Determine winner (using the ESPN "winner" flag if available)
+        if competitors[0].get("winner", False) or (score1 > score2):
             new_games[team1_name] = new_games.get(team1_name, 0) + 1
             new_losers.add(team2_name)
-        elif team2_info.get("winner", False) or (score2 > score1):
+        elif competitors[1].get("winner", False) or (score2 > score1):
             new_games[team2_name] = new_games.get(team2_name, 0) + 1
             new_losers.add(team1_name)
         
-        # Mark this event as processed.
+        # Mark this event as processed
         st.session_state["processed_event_ids"].add(event_id)
     
-    # Merge new results with the cumulative results stored in session_state.
+    # Merge new results with cumulative results in session state
     if "all_results" not in st.session_state:
         st.session_state["all_results"] = {"games": new_games, "losers": new_losers}
     else:
@@ -107,6 +123,7 @@ def get_live_results():
         st.session_state["all_results"] = {"games": all_games, "losers": all_losers}
     
     return st.session_state["all_results"]["games"], st.session_state["all_results"]["losers"]
+
 
 def get_all_espn_team_names():
     """
