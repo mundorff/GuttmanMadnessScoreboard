@@ -87,20 +87,49 @@ def get_live_results():
         
     return current_games, current_losers
 
+def get_all_espn_team_names():
+    """
+    Fetch all team names from ESPN API for the entire tournament.
+    Returns a set of school names using the "location" field.
+    """
+    # Update the tournament_dates to match your tournament schedule (YYYYMMDD-YYYYMMDD)
+    tournament_dates = "20220315-20220405"  
+    url = f"https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?tournament=ncaa&dates={tournament_dates}"
+    response = requests.get(url)
+    data = response.json()
+    
+    teams_set = set()
+    for event in data.get("events", []):
+        competitions = event.get("competitions", [])
+        if not competitions:
+            continue
+        competition = competitions[0]
+        competitors = competition.get("competitors", [])
+        if len(competitors) < 2:
+            continue
+        # Use the "location" field to get just the school name
+        team1 = competitors[0].get("team", {}).get("location", "").strip()
+        team2 = competitors[1].get("team", {}).get("location", "").strip()
+        if team1:
+            teams_set.add(team1)
+        if team2:
+            teams_set.add(team2)
+    return teams_set
+
 # Function to cross-reference team names between ESPN API data and your Google Sheet
 def cross_reference_team_names():
     """
-    Compare team names from ESPN API (accumulated results) and your Google Sheet.
+    Compare team names from the full ESPN tournament data and your Google Sheet.
     Returns two sets:
       - Teams on ESPN but missing in your Google Sheet.
       - Teams in your Google Sheet but not on ESPN.
     """
     team_seeds = get_team_seeds()
-    # Normalize names from the Google Sheet: lower case and stripped of extra spaces.
+    # Normalize Google Sheet names (lowercase, stripped of extra spaces)
     google_team_names = {team.strip().lower() for team in team_seeds.keys() if team.strip()}
     
-    live_results, losers = get_live_results()
-    espn_team_names = {team.strip().lower() for team in list(live_results.keys()) + list(losers)}
+    # Get all ESPN team names and normalize
+    espn_team_names = {team.strip().lower() for team in get_all_espn_team_names()}
     
     teams_in_espn_not_in_google = espn_team_names - google_team_names
     teams_in_google_not_in_espn = google_team_names - espn_team_names
@@ -212,7 +241,6 @@ def display_scoreboard():
         
         st.pyplot(fig)
 
-# --- Sidebar Debugging Option ---
 if st.sidebar.checkbox("Show Cross-Reference Debug Info"):
     missing_espn, missing_google = cross_reference_team_names()
     st.write("### Cross-Reference Check")
