@@ -28,7 +28,9 @@ def get_participants():
 @st.cache_data(ttl=300)
 def get_team_seeds():
     """Fetch team seeds from Google Sheets."""
-    seed_sheet = gc.open_by_url("https://docs.google.com/spreadsheets/d/1pQdTS-HiUcH_s40zcrT8yaJtOQZDTaNsnKka1s2hf7I/edit?gid=0#gid=0").worksheet('Team Seeds')
+    seed_sheet = gc.open_by_url(
+        "https://docs.google.com/spreadsheets/d/1pQdTS-HiUcH_s40zcrT8yaJtOQZDTaNsnKka1s2hf7I/edit?gid=0#gid=0"
+    ).worksheet('Team Seeds')
     data = seed_sheet.get_all_records()
     seeds = {row['Team']: row['Seed'] for row in data}
     return seeds
@@ -71,10 +73,8 @@ def get_live_results():
     games_list = data.get("games", [])
     
     for game in games_list:
-        # Extract home and away dictionaries
         home = game.get("home", {})
         away = game.get("away", {})
-        # Use the helper to get the "short" team name
         home_team = get_team_name(home)
         away_team = get_team_name(away)
         
@@ -87,7 +87,6 @@ def get_live_results():
         except:
             away_score = 0
 
-        # Compare scores to determine winner and record wins and losses.
         if home_score > away_score:
             games[home_team] = games.get(home_team, 0) + 1
             losers.add(away_team)
@@ -232,6 +231,12 @@ if st.sidebar.checkbox("Show Sample NCAA API JSON Data"):
         st.write("Error fetching or parsing NCAA API JSON data:", e)
         st.write("Raw response text:", response.text)
 
+# New Sidebar Checkbox: Show team names pulled from the API
+if st.sidebar.checkbox("Show NCAA API Team Names"):
+    teams = sorted(get_all_ncaa_team_names())
+    st.write("### NCAA API Team Names")
+    st.write(teams)
+
 # -----------------------------
 # Main Display & Auto-Refresh
 # -----------------------------
@@ -245,3 +250,4 @@ for i in range(60, 0, -1):
     time.sleep(1)
 st.session_state['last_updated'] = time.time()
 st.rerun()
+
