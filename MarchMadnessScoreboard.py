@@ -34,58 +34,79 @@ def get_team_seeds():
     return seeds
 
 def get_live_results():
-    """Fetch live game results from ESPN API and merge with previous tournament results."""
+    """
+    Fetch live game results from ESPN API, skipping first-four play-in games,
+    and merge only new game results (based on event IDs) with cumulative results.
+    """
     url = "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?tournament=ncaa"
     response = requests.get(url)
     data = response.json()
     
-    # Temporary dictionaries for today's results
-    current_games = {}
-    current_losers = set()
+    # Initialize the set of processed event IDs if it doesn't exist.
+    if "processed_event_ids" not in st.session_state:
+        st.session_state["processed_event_ids"] = set()
     
-    # Parse through each event returned by ESPN
+    # Dictionaries for new results (only for games not yet processed)
+    new_games = {}
+    new_losers = set()
+    
     for event in data.get("events", []):
+        event_id = event.get("id")
+        if not event_id:
+            continue
+        
+        # Skip if we've already processed this game
+        if event_id in st.session_state["processed_event_ids"]:
+            continue
+        
         competitions = event.get("competitions", [])
         if not competitions:
             continue
         competition = competitions[0]
+        
+        # Check if this is a first-four play-in game.
+        # (Adjust the field and check based on the actual API structure.)
+        round_info = competition.get("round", "")
+        if round_info and "first four" in round_info.lower():
+            # Mark this event as processed and skip it.
+            st.session_state["processed_event_ids"].add(event_id)
+            continue
+        
         competitors = competition.get("competitors", [])
         if len(competitors) < 2:
             continue
         
         team1_info = competitors[0]
         team2_info = competitors[1]
-        # Use the "location" field to get just the school name.
+        # Use the "location" field for school name only
         team1_name = team1_info.get("team", {}).get("location", "").strip()
         team2_name = team2_info.get("team", {}).get("location", "").strip()
         score1 = int(team1_info.get("score", "0"))
         score2 = int(team2_info.get("score", "0"))
         
-        # Determine the winning team (using the ESPN "winner" flag if available)
+        # Determine the winning team, using the ESPN "winner" flag if available.
         if team1_info.get("winner", False) or (score1 > score2):
-            current_games[team1_name] = current_games.get(team1_name, 0) + 1
-            current_losers.add(team2_name)
+            new_games[team1_name] = new_games.get(team1_name, 0) + 1
+            new_losers.add(team2_name)
         elif team2_info.get("winner", False) or (score2 > score1):
-            current_games[team2_name] = current_games.get(team2_name, 0) + 1
-            current_losers.add(team1_name)
+            new_games[team2_name] = new_games.get(team2_name, 0) + 1
+            new_losers.add(team1_name)
+        
+        # Mark this event as processed.
+        st.session_state["processed_event_ids"].add(event_id)
     
-    # Merge today's results with cumulative results stored in session_state
+    # Merge new results with the cumulative results stored in session_state.
     if "all_results" not in st.session_state:
-        st.session_state["all_results"] = {"games": current_games, "losers": current_losers}
+        st.session_state["all_results"] = {"games": new_games, "losers": new_losers}
     else:
-        # Retrieve previous cumulative results
         all_games = st.session_state["all_results"].get("games", {})
         all_losers = st.session_state["all_results"].get("losers", set())
-        # Merge today's wins into cumulative wins
-        for team, wins in current_games.items():
+        for team, wins in new_games.items():
             all_games[team] = all_games.get(team, 0) + wins
-        # Union the losers sets
-        all_losers = all_losers.union(current_losers)
+        all_losers = all_losers.union(new_losers)
         st.session_state["all_results"] = {"games": all_games, "losers": all_losers}
-        current_games = all_games
-        current_losers = all_losers
-        
-    return current_games, current_losers
+    
+    return st.session_state["all_results"]["games"], st.session_state["all_results"]["losers"]
 
 def get_all_espn_team_names():
     """
@@ -93,7 +114,7 @@ def get_all_espn_team_names():
     Returns a set of school names using the "location" field.
     """
     # Update the tournament_dates to match your tournament schedule (YYYYMMDD-YYYYMMDD)
-    tournament_dates = "20250320-20250407"  
+    tournament_dates = "20250318-20250407"  
     url = f"https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?tournament=ncaa&dates={tournament_dates}"
     response = requests.get(url)
     data = response.json()
