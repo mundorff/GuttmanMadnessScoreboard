@@ -248,8 +248,10 @@ if st.sidebar.checkbox("Show Cross-Reference Debug Info"):
         st.write("Teams on ESPN but missing in Google Sheet:", list(missing_espn))
     if missing_google:
         st.write("Teams in Google Sheet but not on ESPN:", list(missing_google))
+        st.write("ESPN teams:", list(get_all_espn_team_names()))
     if not missing_espn and not missing_google:
         st.write("All team names match!")
+
 
 # Display the scoreboard
 display_scoreboard()
