@@ -33,7 +33,6 @@ def get_team_seeds():
     seeds = {row['Team']: row['Seed'] for row in data}
     return seeds
 
-# Function to fetch live game results from ESPN API and merge with cumulative results
 def get_live_results():
     """Fetch live game results from ESPN API and merge with previous tournament results."""
     url = "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?tournament=ncaa"
@@ -56,8 +55,9 @@ def get_live_results():
         
         team1_info = competitors[0]
         team2_info = competitors[1]
-        team1_name = team1_info.get("team", {}).get("displayName", "").strip()
-        team2_name = team2_info.get("team", {}).get("displayName", "").strip()
+        # Use the "location" field to get just the school name.
+        team1_name = team1_info.get("team", {}).get("location", "").strip()
+        team2_name = team2_info.get("team", {}).get("location", "").strip()
         score1 = int(team1_info.get("score", "0"))
         score2 = int(team2_info.get("score", "0"))
         
@@ -76,15 +76,12 @@ def get_live_results():
         # Retrieve previous cumulative results
         all_games = st.session_state["all_results"].get("games", {})
         all_losers = st.session_state["all_results"].get("losers", set())
-        # Merge: if a team appears today, add today's wins (or update, depending on your tournament logic)
-        # Here, we add wins cumulatively.
+        # Merge today's wins into cumulative wins
         for team, wins in current_games.items():
             all_games[team] = all_games.get(team, 0) + wins
-        # Update losers by union-ing the sets
+        # Union the losers sets
         all_losers = all_losers.union(current_losers)
-        # Save the updated cumulative results back into session_state
         st.session_state["all_results"] = {"games": all_games, "losers": all_losers}
-        # Use the cumulative results as the current output
         current_games = all_games
         current_losers = all_losers
         
