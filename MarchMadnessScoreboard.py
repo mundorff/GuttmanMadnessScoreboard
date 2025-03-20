@@ -174,7 +174,7 @@ def update_scores():
             potential_remaining += potential_points
             
             if team in losers:
-                teams_with_seeds.append(f"L ({seed})")
+                teams_with_seeds.append(f"(L){team} ({seed})")
             else:
                 teams_with_seeds.append(f"{team} ({seed})")
         
