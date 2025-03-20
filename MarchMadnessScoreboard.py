@@ -59,6 +59,25 @@ def get_live_results():
     
     return games, losers
 
+def cross_reference_team_names():
+    """
+    Compare team names from CBS Sports (scraped live) and your Google Sheet.
+    Returns two sets:
+      - Teams on CBS but missing in your Google Sheet.
+      - Teams in your Google Sheet but not on CBS.
+    """
+    team_seeds = get_team_seeds()
+    # Normalize names: lower case and stripped of extra spaces.
+    google_team_names = {team.strip().lower() for team in team_seeds.keys()}
+    
+    live_results, losers = get_live_results()
+    cbs_team_names = {team.strip().lower() for team in list(live_results.keys()) + list(losers)}
+    
+    teams_in_cbs_not_in_google = cbs_team_names - google_team_names
+    teams_in_google_not_in_cbs = google_team_names - cbs_team_names
+    
+    return teams_in_cbs_not_in_google, teams_in_google_not_in_cbs
+
 # Streamlit app setup
 st.set_page_config(layout="wide")  # Expands layout to utilize more space
 st.title("🏀 Guttman Madness Scoreboard 🏆")
@@ -163,6 +182,17 @@ def display_scoreboard():
         ax.invert_yaxis()
         
         st.pyplot(fig)
+
+# --- Sidebar Debugging Option ---
+if st.sidebar.checkbox("Show Cross-Reference Debug Info"):
+    missing_cbs, missing_google = cross_reference_team_names()
+    st.write("### Cross-Reference Check")
+    if missing_cbs:
+        st.write("Teams on CBS but missing in Google Sheet:", list(missing_cbs))
+    if missing_google:
+        st.write("Teams in Google Sheet but not on CBS:", list(missing_google))
+    if not missing_cbs and not missing_google:
+        st.write("All team names match!")
 
 # Display the scoreboard
 display_scoreboard()
