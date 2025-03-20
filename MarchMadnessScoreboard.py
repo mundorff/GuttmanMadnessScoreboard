@@ -93,26 +93,52 @@ def update_scores():
     live_results, losers = get_live_results()
     
     scores = []
+    max_wins = 6  # assuming each team can win up to 6 games
     for participant, teams in participants.items():
-        total_score = sum(live_results.get(team, 0) * team_seeds.get(team, 0) for team in teams)
-        teams_with_seeds = "\n".join([
-            f"<s style='color:red'><strike>{team}</strike></s> (Seed {team_seeds.get(team, 'N/A')})" if team in losers 
-            else f"{team} (Seed {team_seeds.get(team, 'N/A')})" for team in teams
-        ])
-        scores.append([participant, total_score, teams_with_seeds])
+        current_score = 0
+        potential_remaining = 0
+        teams_with_seeds = []
+        for team in teams:
+            # Get the seed (displayed as just the number in parentheses)
+            seed = team_seeds.get(team, 'N/A')
+            try:
+                seed_val = int(seed)
+            except Exception:
+                seed_val = 0
+            wins = live_results.get(team, 0)
+            current_points = wins * seed_val
+            current_score += current_points
+            
+            # Calculate potential points: if eliminated, none remain; otherwise, assume remaining wins up to max_wins.
+            if team in losers:
+                potential_points = 0
+            else:
+                potential_points = seed_val * (max_wins - wins)
+            potential_remaining += potential_points
+            
+            # Build the team display: if eliminated, show strike-through.
+            if team in losers:
+                teams_with_seeds.append(f"<s style='color:red'><strike>{team}</strike></s> ({seed})")
+            else:
+                teams_with_seeds.append(f"{team} ({seed})")
+        
+        max_possible = current_score + potential_remaining
+        score_display = f"{current_score}/{max_possible}"
+        teams_with_seeds_str = "\n".join(teams_with_seeds)
+        scores.append([participant, current_score, max_possible, score_display, teams_with_seeds_str])
     
-    df = pd.DataFrame(scores, columns=["Participant", "Score", "Teams (Seeds)"])
-    # First, sort by Score in descending order.
-    df = df.sort_values(by="Score", ascending=False)
+    df = pd.DataFrame(scores, columns=["Participant", "Current Score", "Max Score", "Score", "Teams (Seeds)"])
     
-    # Compute ranking (ties will have the same rank using method='min')
-    df['Place'] = df['Score'].rank(method='min', ascending=False).astype(int)
+    # Sort by current score (highest first) for ranking purposes.
+    df = df.sort_values(by="Current Score", ascending=False)
+    df['Place'] = df['Current Score'].rank(method='min', ascending=False).astype(int)
     
-    # Now sort by Place (lowest rank first) and set it as the index
+    # Sort by Place and set it as the index.
     df = df.sort_values(by="Place")
     df.set_index("Place", inplace=True)
     
-    return df
+    # Return only the columns you want to display.
+    return df[["Participant", "Score", "Teams (Seeds)"]]
 
 # Display the scoreboard
 display_scoreboard()
