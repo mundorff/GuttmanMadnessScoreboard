@@ -111,16 +111,24 @@ def update_scores():
     
     df = pd.DataFrame(scores, columns=["Participant", "Current Score", "Max Score", "Score", "Teams (Seeds)"])
     
-    # Sort by current score (highest first) and compute ranking.
+    # Compute ranking based solely on Current Score.
     df = df.sort_values(by="Current Score", ascending=False)
     df['Place'] = df['Current Score'].rank(method='min', ascending=False).astype(int)
     
-    # Sort by Place and set it as the index.
-    df = df.sort_values(by="Place")
+    # Compute the potential remaining points.
+    df['Remaining'] = df["Max Score"] - df["Current Score"]
+    
+    # Now, sort first by Place (which is based on Current Score) and then by Remaining (descending)
+    df = df.sort_values(by=["Place", "Remaining"], ascending=[True, False])
+    
+    # Set Place as the index.
     df.set_index("Place", inplace=True)
     
     # Rename the score column to "Score/Potential"
     df.rename(columns={"Score": "Score/Potential"}, inplace=True)
+    
+    # Drop the temporary Remaining column so it's not displayed.
+    df = df.drop(columns=["Remaining"])
     
     return df
 
@@ -152,7 +160,6 @@ def display_scoreboard():
         ax.set_xlim(0, max_val)
         
         st.pyplot(fig)
-
 
 # Display the scoreboard
 display_scoreboard()
