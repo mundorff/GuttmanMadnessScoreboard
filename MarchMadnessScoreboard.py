@@ -42,10 +42,10 @@ def get_team_name(comp):
     Prioritize the "short" field found under the "names" dictionary.
     Example competitor JSON:
       "names": {
-          "char6": "CREIGH",
-          "short": "Creighton",
-          "seo": "creighton",
-          "full": "Creighton University"
+         "char6": "CREIGH",
+         "short": "Creighton",
+         "seo": "creighton",
+         "full": "Creighton University"
       }
     """
     names = comp.get("names", {})
@@ -56,7 +56,7 @@ def get_live_results():
     Fetch game results from the NCAA API endpoint for men's college basketball (D1).
     Uses the endpoint: https://ncaa-api.henrygd.me/scoreboard/basketball-men/d1
     Returns:
-      - games: a dictionary mapping team names (using the "short" field) to the number of wins.
+      - games: a dictionary mapping team names (using the "short" field) to number of wins.
       - losers: a set of teams that lost at least one game.
     """
     url = "https://ncaa-api.henrygd.me/scoreboard/basketball-men/d1"
@@ -155,7 +155,7 @@ def update_scores():
     for participant, teams in participants.items():
         current_score = 0
         potential_remaining = 0
-        team_columns = []  # We'll create one column per team
+        team_columns = []  # One column per team
         for team in teams:
             seed = team_seeds.get(team, 'N/A')
             try:
@@ -172,7 +172,6 @@ def update_scores():
                 potential_points = seed_val * (max_wins - wins)
             potential_remaining += potential_points
             
-            # Store the plain text (e.g., "Creighton (9)")
             team_columns.append(f"{team} ({seed})")
         
         max_possible = current_score + potential_remaining
@@ -201,8 +200,12 @@ def style_team(cell_value, losers):
 
 def display_scoreboard():
     df, losers = update_scores()
-    # Use Pandas Styler to conditionally format the team columns
-    styled_df = df.style.applymap(lambda cell: style_team(cell, losers), subset=["Team1", "Team2", "Team3", "Team4"])
+    # Determine which team columns exist
+    expected_team_cols = ["Team1", "Team2", "Team3", "Team4"]
+    team_cols = [col for col in expected_team_cols if col in df.columns]
+    
+    # Apply conditional styling using Pandas Styler
+    styled_df = df.style.applymap(lambda cell: style_team(cell, losers), subset=team_cols)
     
     col1, col2 = st.columns([3, 2])
     with col1:
@@ -260,4 +263,3 @@ for i in range(60, 0, -1):
     time.sleep(1)
 st.session_state['last_updated'] = time.time()
 st.rerun()
-
