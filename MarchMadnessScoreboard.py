@@ -36,7 +36,7 @@ def get_team_seeds():
 # Function to scrape live March Madness scores from CBS Sports
 def get_live_results():
     """Fetch live game results from CBS Sports."""
-    url = "https://www.cbssports.com/college-basketball/scoreboard/"
+    url = "https://www.cbssports.com/college-basketball/ncaa-tournament/bracket/"
     response = requests.get(url)
     soup = BeautifulSoup(response.text, 'html.parser')
     
