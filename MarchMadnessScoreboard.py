@@ -204,12 +204,16 @@ def display_scoreboard():
     expected_team_cols = ["Team1", "Team2", "Team3", "Team4"]
     team_cols = [col for col in expected_team_cols if col in df.columns]
     
-    # Apply conditional styling using Pandas Styler
-    styled_df = df.style.applymap(lambda cell: style_team(cell, losers), subset=team_cols)
+    # Apply conditional styling using Pandas Styler.
+    # Make a copy to be safe.
+    styled_df = df.copy().style.applymap(lambda cell: style_team(cell, losers), subset=team_cols)
+    
+    # Convert the styled DataFrame to HTML and render it.
+    html_table = styled_df.render()
     
     col1, col2 = st.columns([3, 2])
     with col1:
-        st.write(styled_df)
+        st.markdown(html_table, unsafe_allow_html=True)
     with col2:
         fig, ax = plt.subplots(figsize=(6, 6))
         ax.barh(df["Participant"], df["Max Score"], color='lightgrey')
