@@ -72,18 +72,30 @@ if 'last_updated' not in st.session_state:
 def display_scoreboard():
     df = update_scores()
     
-    # Create two columns for better spacing
+    # Create two columns for the table and the chart.
     col1, col2 = st.columns([3, 2])
     
     with col1:
-        st.dataframe(df, height=600, use_container_width=True)
+        # Display only the selected columns in the table.
+        st.dataframe(df[["Participant", "Score", "Teams (Seeds)"]], height=600, use_container_width=True)
     
     with col2:
-        # Generate a bar chart
-        fig, ax = plt.subplots(figsize=(6, 6))  # Adjust size to prevent cramping
-        ax.barh(df["Participant"], df["Score"], color='royalblue')
-        ax.set_xlabel("Score")
-        ax.set_title("March Madness PickX Leaderboard")
+        # Create a horizontal bar chart with overlaying bars.
+        fig, ax = plt.subplots(figsize=(6, 6))
+        
+        # Grey bar for the maximum (potential) score.
+        ax.barh(df["Participant"], df["Max Score"], color='lightgrey')
+        
+        # Overlay the green bar for the current score.
+        ax.barh(df["Participant"], df["Current Score"], color='green')
+        
+        ax.set_xlabel("Points")
+        ax.set_title("March Madness PickX Progress")
+        
+        # Ensure the x-axis always starts at 0 and extends to the highest Max Score.
+        max_val = df["Max Score"].max() if not df["Max Score"].empty else 1
+        ax.set_xlim(0, max_val)
+        
         st.pyplot(fig)
 
 # Function to update scores
@@ -99,7 +111,7 @@ def update_scores():
         potential_remaining = 0
         teams_with_seeds = []
         for team in teams:
-            # Get the seed (displayed as just the number in parentheses)
+            # Display the seed as a simple number in parentheses
             seed = team_seeds.get(team, 'N/A')
             try:
                 seed_val = int(seed)
@@ -109,14 +121,14 @@ def update_scores():
             current_points = wins * seed_val
             current_score += current_points
             
-            # Calculate potential points: if eliminated, none remain; otherwise, assume remaining wins up to max_wins.
+            # Calculate potential additional points only if the team is still in play.
             if team in losers:
                 potential_points = 0
             else:
                 potential_points = seed_val * (max_wins - wins)
             potential_remaining += potential_points
             
-            # Build the team display: if eliminated, show strike-through.
+            # Format team display: strike-through if eliminated.
             if team in losers:
                 teams_with_seeds.append(f"<s style='color:red'><strike>{team}</strike></s> ({seed})")
             else:
@@ -129,7 +141,7 @@ def update_scores():
     
     df = pd.DataFrame(scores, columns=["Participant", "Current Score", "Max Score", "Score", "Teams (Seeds)"])
     
-    # Sort by current score (highest first) for ranking purposes.
+    # Sort by current score (highest first) and compute ranking.
     df = df.sort_values(by="Current Score", ascending=False)
     df['Place'] = df['Current Score'].rank(method='min', ascending=False).astype(int)
     
@@ -137,8 +149,7 @@ def update_scores():
     df = df.sort_values(by="Place")
     df.set_index("Place", inplace=True)
     
-    # Return only the columns you want to display.
-    return df[["Participant", "Score", "Teams (Seeds)"]]
+    return df
 
 # Display the scoreboard
 display_scoreboard()
