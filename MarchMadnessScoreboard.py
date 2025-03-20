@@ -36,13 +36,28 @@ def get_team_seeds():
 # -----------------------------
 # NCAA API Functions using new endpoint
 # -----------------------------
+def get_team_name(comp):
+    """
+    Extract the team name from a competitor's dictionary.
+    Prioritize the "short" field found under the "names" dictionary.
+    Example competitor JSON:
+      "names": {
+          "char6": "CREIGH",
+          "short": "Creighton",
+          "seo": "creighton",
+          "full": "Creighton University"
+      }
+    """
+    names = comp.get("names", {})
+    return names.get("short", "").strip()
+
 def get_live_results():
     """
     Fetch game results from the NCAA API endpoint for men's college basketball (D1).
     Uses the endpoint: https://ncaa-api.henrygd.me/scoreboard/basketball-men/d1
     Returns:
-      - games: a dictionary mapping team names to the number of wins (accumulated from each game)
-      - losers: a set of teams that lost at least one game
+      - games: a dictionary mapping team names (using the "short" field) to the number of wins.
+      - losers: a set of teams that lost at least one game.
     """
     url = "https://ncaa-api.henrygd.me/scoreboard/basketball-men/d1"
     response = requests.get(url)
@@ -56,11 +71,12 @@ def get_live_results():
     games_list = data.get("games", [])
     
     for game in games_list:
-        # Extract home and away team info
+        # Extract home and away dictionaries
         home = game.get("home", {})
         away = game.get("away", {})
-        home_team = home.get("school", "").strip()
-        away_team = away.get("school", "").strip()
+        # Use the helper to get the "short" team name
+        home_team = get_team_name(home)
+        away_team = get_team_name(away)
         
         try:
             home_score = int(home.get("score", 0))
@@ -71,21 +87,19 @@ def get_live_results():
         except:
             away_score = 0
 
-        # Determine winner based on score comparison
+        # Compare scores to determine winner and record wins and losses.
         if home_score > away_score:
             games[home_team] = games.get(home_team, 0) + 1
             losers.add(away_team)
         elif away_score > home_score:
             games[away_team] = games.get(away_team, 0) + 1
             losers.add(home_team)
-        # In case of tie, no win is recorded.
-    
     return games, losers
 
 def get_all_ncaa_team_names():
     """
     Fetch all team names from the NCAA API endpoint.
-    Returns a set of team names (using the "school" field) extracted from every game.
+    Returns a set of team names (using the "short" field) extracted from every game.
     """
     url = "https://ncaa-api.henrygd.me/scoreboard/basketball-men/d1"
     response = requests.get(url)
@@ -98,8 +112,8 @@ def get_all_ncaa_team_names():
     for game in games_list:
         home = game.get("home", {})
         away = game.get("away", {})
-        home_team = home.get("school", "").strip()
-        away_team = away.get("school", "").strip()
+        home_team = get_team_name(home)
+        away_team = get_team_name(away)
         if home_team:
             teams_set.add(home_team)
         if away_team:
@@ -110,8 +124,8 @@ def cross_reference_team_names():
     """
     Compare team names from the NCAA API scoreboard and your Google Sheet.
     Returns two sets:
-      - Teams on NCAA API but missing in your Google Sheet.
-      - Teams in your Google Sheet but not on NCAA API.
+      - Teams on the NCAA API but missing in your Google Sheet.
+      - Teams in your Google Sheet but not on the NCAA API.
     """
     team_seeds = get_team_seeds()
     google_team_names = {team.strip().lower() for team in team_seeds.keys() if team.strip()}
@@ -152,7 +166,6 @@ def update_scores():
             current_points = wins * seed_val
             current_score += current_points
             
-            # Calculate potential remaining points if team hasn't lost.
             if team in losers:
                 potential_points = 0
             else:
@@ -232,4 +245,3 @@ for i in range(60, 0, -1):
     time.sleep(1)
 st.session_state['last_updated'] = time.time()
 st.rerun()
-
