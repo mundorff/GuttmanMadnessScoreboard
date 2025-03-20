@@ -34,102 +34,81 @@ def get_team_seeds():
     return seeds
 
 # -----------------------------
-# NCAA API Functions (Free API)
+# NCAA API Functions using new endpoint
 # -----------------------------
 def get_live_results():
     """
-    Fetch game results from the NCAA API bracket endpoint.
-    Uses the free API endpoint corresponding to the NCAA.com bracket page:
-      https://ncaa-api.henrygd.me/march-madness-live/bracket
-    Assumes the JSON contains a 'bracket' key with 'regions' → 'rounds' → 'matchups',
-    where each matchup has a 'competitors' list containing two objects with keys:
-      - "school": the school name (string)
-      - "score": the score (string or number)
-      - "winner": boolean flag (optional)
+    Fetch game results from the NCAA API endpoint for men's college basketball (D1).
+    Uses the endpoint: https://ncaa-api.henrygd.me/scoreboard/basketball-men/d1
     Returns:
-      - games: a dict mapping school name to number of wins
-      - losers: a set of schools that have lost in any matchup
+      - games: a dictionary mapping team names to the number of wins (accumulated from each game)
+      - losers: a set of teams that lost at least one game
     """
-    url = "https://ncaa-api.henrygd.me/march-madness-live/bracket"
+    url = "https://ncaa-api.henrygd.me/scoreboard/basketball-men/d1"
     response = requests.get(url)
     if response.status_code != 200:
-        st.error(f"Bracket endpoint returned error code {response.status_code}. No live results available.")
+        st.error(f"Scoreboard endpoint returned error code {response.status_code}. No live results available.")
         return {}, set()
     data = response.json()
     
-    bracket = data.get("bracket", {})
-    regions = bracket.get("regions", [])
-    
     games = {}
     losers = set()
+    games_list = data.get("games", [])
     
-    for region in regions:
-        rounds = region.get("rounds", [])
-        for rnd in rounds:
-            matchups = rnd.get("matchups", [])
-            for matchup in matchups:
-                competitors = matchup.get("competitors", [])
-                if len(competitors) < 2:
-                    continue
-                
-                # Helper: Get team name from competitor using the "school" field
-                def get_team_name(comp):
-                    return comp.get("school", "").strip()
-                
-                team1_name = get_team_name(competitors[0])
-                team2_name = get_team_name(competitors[1])
-                
-                try:
-                    score1 = int(competitors[0].get("score", "0"))
-                except:
-                    score1 = 0
-                try:
-                    score2 = int(competitors[1].get("score", "0"))
-                except:
-                    score2 = 0
-                
-                # Determine winner: use the "winner" flag if available, otherwise compare scores
-                if competitors[0].get("winner", False) or (score1 > score2):
-                    games[team1_name] = games.get(team1_name, 0) + 1
-                    losers.add(team2_name)
-                elif competitors[1].get("winner", False) or (score2 > score1):
-                    games[team2_name] = games.get(team2_name, 0) + 1
-                    losers.add(team1_name)
+    for game in games_list:
+        # Extract home and away team info
+        home = game.get("home", {})
+        away = game.get("away", {})
+        home_team = home.get("school", "").strip()
+        away_team = away.get("school", "").strip()
+        
+        try:
+            home_score = int(home.get("score", 0))
+        except:
+            home_score = 0
+        try:
+            away_score = int(away.get("score", 0))
+        except:
+            away_score = 0
+
+        # Determine winner based on score comparison
+        if home_score > away_score:
+            games[home_team] = games.get(home_team, 0) + 1
+            losers.add(away_team)
+        elif away_score > home_score:
+            games[away_team] = games.get(away_team, 0) + 1
+            losers.add(home_team)
+        # In case of tie, no win is recorded.
+    
     return games, losers
 
 def get_all_ncaa_team_names():
     """
-    Fetch all team names from the NCAA API bracket endpoint.
-    Returns a set of school names using the 'school' field.
+    Fetch all team names from the NCAA API endpoint.
+    Returns a set of team names (using the "school" field) extracted from every game.
     """
-    url = "https://ncaa-api.henrygd.me/march-madness-live/bracket"
+    url = "https://ncaa-api.henrygd.me/scoreboard/basketball-men/d1"
     response = requests.get(url)
     if response.status_code != 200:
-        st.error(f"Bracket endpoint returned error code {response.status_code} for team list.")
+        st.error(f"Scoreboard endpoint returned error code {response.status_code} for team list.")
         return set()
     data = response.json()
+    games_list = data.get("games", [])
     teams_set = set()
-    bracket = data.get("bracket", {})
-    regions = bracket.get("regions", [])
-    for region in regions:
-        rounds = region.get("rounds", [])
-        for rnd in rounds:
-            matchups = rnd.get("matchups", [])
-            for matchup in matchups:
-                competitors = matchup.get("competitors", [])
-                if len(competitors) < 2:
-                    continue
-                team1 = competitors[0].get("school", "").strip()
-                team2 = competitors[1].get("school", "").strip()
-                if team1:
-                    teams_set.add(team1)
-                if team2:
-                    teams_set.add(team2)
+    for game in games_list:
+        home = game.get("home", {})
+        away = game.get("away", {})
+        home_team = home.get("school", "").strip()
+        away_team = away.get("school", "").strip()
+        if home_team:
+            teams_set.add(home_team)
+        if away_team:
+            teams_set.add(away_team)
     return teams_set
 
 def cross_reference_team_names():
     """
-    Compare team names from the NCAA API bracket and your Google Sheet.
+    Compare team names from the NCAA API scoreboard and your Google Sheet.
     Returns two sets:
       - Teams on NCAA API but missing in your Google Sheet.
       - Teams in your Google Sheet but not on NCAA API.
@@ -173,6 +152,7 @@ def update_scores():
             current_points = wins * seed_val
             current_score += current_points
             
+            # Calculate potential remaining points if team hasn't lost.
             if team in losers:
                 potential_points = 0
             else:
@@ -228,15 +208,16 @@ if st.sidebar.checkbox("Show Cross-Reference Debug Info"):
     if not missing_api and not missing_sheet:
         st.write("All team names match!")
 
-if st.sidebar.checkbox("Show Sample NCAA Bracket JSON Data"):
-    url = "https://ncaa-api.henrygd.me/march-madness-live/bracket"
+if st.sidebar.checkbox("Show Sample NCAA API JSON Data"):
+    url = "https://ncaa-api.henrygd.me/scoreboard/basketball-men/d1"
     response = requests.get(url)
     try:
         data = response.json()
-        st.write("### Sample NCAA Bracket JSON Data")
+        st.write("### Sample NCAA API JSON Data")
         st.json(data)
     except Exception as e:
         st.write("Error fetching or parsing NCAA API JSON data:", e)
+        st.write("Raw response text:", response.text)
 
 # -----------------------------
 # Main Display & Auto-Refresh
@@ -251,3 +232,4 @@ for i in range(60, 0, -1):
     time.sleep(1)
 st.session_state['last_updated'] = time.time()
 st.rerun()
+
