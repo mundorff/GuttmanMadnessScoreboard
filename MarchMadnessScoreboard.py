@@ -14,7 +14,9 @@ try:
     credentials_dict = dict(st.secrets["google_service_account"])
     credentials = ServiceAccountCredentials.from_json_keyfile_dict(credentials_dict)
     gc = gspread.authorize(credentials)
-    sheet = gc.open_by_url("https://docs.google.com/spreadsheets/d/1pQdTS-HiUcH_s40zcrT8yaJtOQZDTaNsnKka1s2hf7I/edit?gid=0#gid=0").sheet1
+    # Open the spreadsheet and get the primary sheet for participants.
+    spreadsheet = gc.open_by_url("https://docs.google.com/spreadsheets/d/1pQdTS-HiUcH_s40zcrT8yaJtOQZDTaNsnKka1s2hf7I/edit?gid=0#gid=0")
+    sheet = spreadsheet.sheet1
 except Exception as e:
     st.error(f"⚠️ Error loading Google Sheets credentials: {e}")
     st.stop()
@@ -28,7 +30,7 @@ def get_participants():
 @st.cache_data(ttl=300)
 def get_team_seeds():
     """Fetch team seeds from Google Sheets."""
-    seed_sheet = gc.open_by_url("https://docs.google.com/spreadsheets/d/1pQdTS-HiUcH_s40zcrT8yaJtOQZDTaNsnKka1s2hf7I/edit?gid=0#gid=0").worksheet('Team Seeds')
+    seed_sheet = spreadsheet.worksheet('Team Seeds')
     data = seed_sheet.get_all_records()
     seeds = {row['Team']: row['Seed'] for row in data}
     return seeds
@@ -40,13 +42,6 @@ def get_team_name(comp):
     """
     Extract the team name from a competitor's dictionary.
     Prioritize the "short" field found under the "names" dictionary.
-    Example competitor JSON:
-      "names": {
-         "char6": "CREIGH",
-         "short": "Creighton",
-         "seo": "creighton",
-         "full": "Creighton University"
-      }
     """
     names = comp.get("names", {})
     return names.get("short", "").strip()
@@ -54,7 +49,6 @@ def get_team_name(comp):
 def get_live_results():
     """
     Fetch game results from the NCAA API endpoint for men's college basketball (D1).
-    Uses the endpoint: https://ncaa-api.henrygd.me/scoreboard/basketball-men/d1
     Returns:
       - games: a dictionary mapping team names (using the "short" field) to number of wins.
       - losers: a set of teams that lost at least one game.
@@ -71,7 +65,6 @@ def get_live_results():
     games_list = data.get("games", [])
     
     for game_obj in games_list:
-        # Each game object now has an inner "game" key
         game = game_obj.get("game", {})
         home = game.get("home", {})
         away = game.get("away", {})
@@ -87,7 +80,6 @@ def get_live_results():
         except:
             away_score = 0
         
-        # Determine winner based on score comparison
         if home_score > away_score:
             games[home_team] = games.get(home_team, 0) + 1
             losers.add(away_team)
@@ -137,6 +129,31 @@ def cross_reference_team_names():
     return teams_in_api_not_in_sheet, teams_in_sheet_not_in_api
 
 # -----------------------------
+# Archive Functionality
+# -----------------------------
+def archive_scores(df):
+    """
+    Archive the current scoreboard (DataFrame) to a new worksheet in the Google Sheet.
+    The new worksheet will be named with today's date (e.g., "2025-03-20").
+    If a worksheet for today already exists, it will be updated.
+    """
+    today_str = time.strftime("%Y-%m-%d")
+    try:
+        # Try to get an existing worksheet for today's date.
+        archive_sheet = spreadsheet.worksheet(today_str)
+    except gspread.exceptions.WorksheetNotFound:
+        # Create a new worksheet if it doesn't exist.
+        rows = str(df.shape[0] + 10)  # adding extra rows
+        cols = str(df.shape[1] + 5)   # adding extra columns
+        archive_sheet = spreadsheet.add_worksheet(title=today_str, rows=rows, cols=cols)
+    
+    # Prepare data for archiving (include the index as a column).
+    data = [df.reset_index().columns.tolist()] + df.reset_index().values.tolist()
+    archive_sheet.clear()  # clear previous data (if any)
+    archive_sheet.update("A1", data)
+    st.success(f"Scoreboard archived to tab '{today_str}'!")
+
+# -----------------------------
 # Streamlit App Display Functions
 # -----------------------------
 st.set_page_config(layout="wide")
@@ -145,6 +162,8 @@ st.write("Scores update automatically every minute. Each win gives points equal 
 
 if 'last_updated' not in st.session_state:
     st.session_state['last_updated'] = time.time()
+if 'last_archived_date' not in st.session_state:
+    st.session_state['last_archived_date'] = ""  # To track the last day an archive was done
 
 def update_scores():
     participants = get_participants()
@@ -178,19 +197,17 @@ def update_scores():
             else:
                 teams_with_seeds.append(f"{team} ({seed})")
 
-        
         max_possible = current_score + potential_remaining
         score_display = f"{current_score}/{max_possible}"
         teams_with_seeds_str = "\n".join(teams_with_seeds)
         scores.append([participant, current_score, max_possible, score_display, teams_with_seeds_str])
     
-    df = pd.DataFrame(scores, columns=["Participant", "Current Score", "Max Score", "Score", "Teams (Seeds)"])
+    df = pd.DataFrame(scores, columns=["Participant", "Current Score", "Max Score", "Score/Potential", "Teams (Seeds)"])
     df = df.sort_values(by="Current Score", ascending=False)
     df['Place'] = df['Current Score'].rank(method='min', ascending=False).astype(int)
     df['Remaining'] = df["Max Score"] - df["Current Score"]
     df = df.sort_values(by=["Place", "Remaining"], ascending=[True, False])
     df.set_index("Place", inplace=True)
-    df.rename(columns={"Score": "Score/Potential"}, inplace=True)
     df = df.drop(columns=["Remaining"])
     return df
 
@@ -209,12 +226,23 @@ def display_scoreboard():
         ax.set_xlim(0, max_val)
         ax.invert_yaxis()
         st.pyplot(fig)
+    return df
 
 # -----------------------------
-# Main Display & Auto-Refresh
+# Main Display, Auto-Archive & Auto-Refresh
 # -----------------------------
-display_scoreboard()
+df = display_scoreboard()
 
+# --- Auto-Archive Logic ---
+# Get current time in 24-hour format and current date.
+current_time = time.strftime("%H:%M")
+current_date = time.strftime("%Y-%m-%d")
+# Check if it's 11:58 PM and if we haven't already archived today.
+if current_time == "23:58" and st.session_state.get("last_archived_date") != current_date:
+    archive_scores(df)
+    st.session_state["last_archived_date"] = current_date
+
+# Auto-refresh every 60 seconds.
 refresh_timer = st.empty()
 for i in range(60, 0, -1):
     refresh_timer.markdown(
@@ -223,3 +251,4 @@ for i in range(60, 0, -1):
     time.sleep(1)
 st.session_state['last_updated'] = time.time()
 st.rerun()
+
