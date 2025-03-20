@@ -34,100 +34,91 @@ def get_team_seeds():
     return seeds
 
 # -----------------------------
-# ESPN Bracket Endpoint Functions
+# NCAA API Functions
 # -----------------------------
 def get_live_results():
     """
-    Fetch game results from the ESPN bracket endpoint for the 2025 tournament.
-    Returns a dictionary mapping team name to wins and a set of teams that lost in any game.
+    Fetch game results from the NCAA API for men's college basketball.
+    Returns a dictionary mapping team names to wins and a set of teams that lost in any game.
+    
+    This example uses the following endpoint:
+      https://ncaa-api.henrygd.me/scoreboard/basketball/d1/2025/1/all-conf
+    Adjust the path parameters as needed to match the URL on ncaa.com.
     """
-    url = "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/bracket?season=2025"
+    url = "https://ncaa-api.henrygd.me/scoreboard/basketball/d1/2025/1/all-conf"
     response = requests.get(url)
+    if response.status_code != 200:
+        st.error(f"Scoreboard endpoint returned error code {response.status_code}. No live results available.")
+        return {}, set()
     data = response.json()
     
     games = {}
     losers = set()
-    regions = data.get("regions", [])
-    for region in regions:
-        rounds = region.get("rounds", [])
-        for rnd in rounds:
-            matchups = rnd.get("matchups", [])
-            for matchup in matchups:
-                competitors = matchup.get("competitors", [])
-                if len(competitors) < 2:
-                    continue
-
-                def get_team_name(comp):
-                    team = comp.get("team", {})
-                    # Use the 'location' field (school name) with fallback to 'displayName'
-                    name = team.get("location", "").strip()
-                    if not name:
-                        name = team.get("displayName", "").strip()
-                    return name
-
-                team1_name = get_team_name(competitors[0])
-                team2_name = get_team_name(competitors[1])
-                
-                try:
-                    score1 = int(competitors[0].get("score", "0"))
-                except:
-                    score1 = 0
-                try:
-                    score2 = int(competitors[1].get("score", "0"))
-                except:
-                    score2 = 0
-
-                # Determine the winner using the ESPN 'winner' flag if available
-                if competitors[0].get("winner", False) or (score1 > score2):
-                    games[team1_name] = games.get(team1_name, 0) + 1
-                    losers.add(team2_name)
-                elif competitors[1].get("winner", False) or (score2 > score1):
-                    games[team2_name] = games.get(team2_name, 0) + 1
-                    losers.add(team1_name)
+    games_list = data.get("games", [])
+    for game in games_list:
+        home = game.get("home", {})
+        away = game.get("away", {})
+        home_team = home.get("school", "").strip()
+        away_team = away.get("school", "").strip()
+        try:
+            home_score = int(home.get("score", 0))
+        except:
+            home_score = 0
+        try:
+            away_score = int(away.get("score", 0))
+        except:
+            away_score = 0
+        
+        # Determine winner based on score comparison
+        if home_score > away_score:
+            games[home_team] = games.get(home_team, 0) + 1
+            losers.add(away_team)
+        elif away_score > home_score:
+            games[away_team] = games.get(away_team, 0) + 1
+            losers.add(home_team)
+        # In case of a tie, no win is recorded.
     return games, losers
 
-def get_all_espn_team_names():
+def get_all_ncaa_team_names():
     """
-    Fetch all team names from the ESPN bracket endpoint for the full tournament.
-    Returns a set of school names (using the 'location' field).
+    Fetch all team names from the NCAA API scoreboard for the day.
+    Returns a set of team names based on the 'school' field.
     """
-    url = "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/bracket?season=2025"
+    url = "https://ncaa-api.henrygd.me/scoreboard/basketball/d1/2025/1/all-conf"
     response = requests.get(url)
+    if response.status_code != 200:
+        st.error(f"Scoreboard endpoint returned error code {response.status_code} for team list.")
+        return set()
     data = response.json()
+    games_list = data.get("games", [])
     teams_set = set()
-    regions = data.get("regions", [])
-    for region in regions:
-        rounds = region.get("rounds", [])
-        for rnd in rounds:
-            matchups = rnd.get("matchups", [])
-            for matchup in matchups:
-                competitors = matchup.get("competitors", [])
-                if len(competitors) < 2:
-                    continue
-                team1 = competitors[0].get("team", {}).get("location", "").strip()
-                team2 = competitors[1].get("team", {}).get("location", "").strip()
-                if team1:
-                    teams_set.add(team1)
-                if team2:
-                    teams_set.add(team2)
+    for game in games_list:
+        home = game.get("home", {})
+        away = game.get("away", {})
+        home_team = home.get("school", "").strip()
+        away_team = away.get("school", "").strip()
+        if home_team:
+            teams_set.add(home_team)
+        if away_team:
+            teams_set.add(away_team)
     return teams_set
 
 def cross_reference_team_names():
     """
-    Compare team names from the full ESPN bracket data and your Google Sheet.
+    Compare team names from the NCAA API scoreboard and your Google Sheet.
     Returns two sets:
-      - Teams on ESPN but missing in your Google Sheet.
-      - Teams in your Google Sheet but not on ESPN.
+      - Teams on NCAA API but missing in your Google Sheet.
+      - Teams in your Google Sheet but not on NCAA API.
     """
     team_seeds = get_team_seeds()
-    # Normalize Google Sheet names (lowercase, stripped)
+    # Normalize Google Sheet names
     google_team_names = {team.strip().lower() for team in team_seeds.keys() if team.strip()}
-    # Normalize ESPN bracket team names
-    espn_team_names = {team.strip().lower() for team in get_all_espn_team_names()}
+    # Normalize NCAA API team names
+    ncaa_team_names = {team.strip().lower() for team in get_all_ncaa_team_names()}
     
-    teams_in_espn_not_in_google = espn_team_names - google_team_names
-    teams_in_google_not_in_espn = google_team_names - espn_team_names
-    return teams_in_espn_not_in_google, teams_in_google_not_in_espn
+    teams_in_api_not_in_sheet = ncaa_team_names - google_team_names
+    teams_in_sheet_not_in_api = google_team_names - ncaa_team_names
+    return teams_in_api_not_in_sheet, teams_in_sheet_not_in_api
 
 # -----------------------------
 # Streamlit App Display Functions
@@ -160,13 +151,14 @@ def update_scores():
             current_points = wins * seed_val
             current_score += current_points
             
-            # Calculate potential additional points if team hasn't been eliminated.
+            # Calculate potential points only if team is not marked as loser
             if team in losers:
                 potential_points = 0
             else:
                 potential_points = seed_val * (max_wins - wins)
             potential_remaining += potential_points
             
+            # Format team display: strike-through if eliminated (i.e. in losers)
             if team in losers:
                 teams_with_seeds.append(f"<s style='color:red'><strike>{team}</strike></s> ({seed})")
             else:
@@ -207,24 +199,24 @@ def display_scoreboard():
 # Sidebar Debug Options
 # -----------------------------
 if st.sidebar.checkbox("Show Cross-Reference Debug Info"):
-    missing_espn, missing_google = cross_reference_team_names()
+    missing_api, missing_sheet = cross_reference_team_names()
     st.write("### Cross-Reference Check")
-    if missing_espn:
-        st.write("Teams on ESPN but missing in Google Sheet:", list(missing_espn))
-    if missing_google:
-        st.write("Teams in Google Sheet but not on ESPN:", list(missing_google))
-    if not missing_espn and not missing_google:
+    if missing_api:
+        st.write("Teams on NCAA API but missing in Google Sheet:", list(missing_api))
+    if missing_sheet:
+        st.write("Teams in Google Sheet but not on NCAA API:", list(missing_sheet))
+    if not missing_api and not missing_sheet:
         st.write("All team names match!")
 
-if st.sidebar.checkbox("Show Sample ESPN Bracket Data"):
-    url = "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/bracket?season=2025"
+if st.sidebar.checkbox("Show Sample NCAA API Data"):
+    url = "https://ncaa-api.henrygd.me/scoreboard/basketball/d1/2025/1/all-conf"
     response = requests.get(url)
     try:
         data = response.json()
-        st.write("### Sample ESPN Bracket JSON Data")
+        st.write("### Sample NCAA API JSON Data")
         st.json(data)
     except Exception as e:
-        st.write("Error fetching or parsing bracket JSON data:", e)
+        st.write("Error fetching or parsing NCAA API JSON data:", e)
 
 # -----------------------------
 # Main Display & Auto-Refresh
