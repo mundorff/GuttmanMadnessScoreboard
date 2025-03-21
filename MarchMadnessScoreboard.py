@@ -252,9 +252,8 @@ def update_scores():
             
             # Check if the team was marked lost previously.
             was_lost_before = team in prev_losers.get(participant, set())
-            # If the team lost today or was already lost previously, assign zero potential.
-            # Determine potential points.
-            if team in losers:
+            # Determine potential points: zero if the team lost either today or previously.
+            if team in losers or was_lost_before:
                 potential_points = 0
                 todays_loss_today = True
             else:
@@ -263,9 +262,7 @@ def update_scores():
             
             todays_max_possible += potential_points
             
-            # Check if the team was marked lost previously.
-            was_lost_before = team in prev_losers.get(participant, set())
-            # If the team lost previously or lost today, mark it as lost.
+            # Mark the team as lost if it lost previously or today.
             if was_lost_before or todays_loss_today:
                 teams_with_seeds.append(f'(L){team} ({seed})')
             else:
