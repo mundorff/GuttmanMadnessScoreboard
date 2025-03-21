@@ -156,8 +156,10 @@ def archive_scores(df):
 def load_previous_cumulative_scores():
     """
     Scan the Google Sheet for worksheets named with a date (YYYY-MM-DD) that are before today.
-    Returns a dictionary mapping each participant to a tuple (prev_current, prev_max).
-    If no previous archive is found, returns an empty dictionary.
+    Returns two dictionaries:
+      - cumulative: mapping each participant to a tuple (prev_current, prev_max).
+      - prev_losers: mapping each participant to a set of teams that lost (extracted from the "Teams (Seeds)" column).
+    If no previous archive is found, returns empty dictionaries.
     """
     today_str = time.strftime("%Y-%m-%d")
     prev_date = None
@@ -175,9 +177,10 @@ def load_previous_cumulative_scores():
             if prev_date is None or title > prev_date:
                 prev_date = title
                 prev_sheet = ws
+    cumulative = {}
+    prev_losers = {}
     if prev_sheet:
         records = prev_sheet.get_all_records()
-        cumulative = {}
         for row in records:
             participant = row.get("Participant")
             try:
@@ -188,11 +191,22 @@ def load_previous_cumulative_scores():
                 prev_max = float(row.get("Max Score", 0))
             except:
                 prev_max = 0
-            if participant:
-                cumulative[participant] = (prev_current, prev_max)
-        return cumulative
-    else:
-        return {}
+            # Parse the "Teams (Seeds)" column to get previously lost teams.
+            teams_str = row.get("Teams (Seeds)", "")
+            losers_set = set()
+            for team_entry in teams_str.split("\n"):
+                team_entry = team_entry.strip()
+                if team_entry.startswith("(L)"):
+                    # Remove the "(L)" marker and extract the team name (ignoring the seed).
+                    team_name_with_seed = team_entry[3:].strip()
+                    if " (" in team_name_with_seed:
+                        team_name = team_name_with_seed.split(" (")[0]
+                    else:
+                        team_name = team_name_with_seed
+                    losers_set.add(team_name)
+            cumulative[participant] = (prev_current, prev_max)
+            prev_losers[participant] = losers_set
+    return cumulative, prev_losers
 
 # -----------------------------
 # Streamlit App Display Functions (with cumulative scores)
@@ -208,13 +222,16 @@ if 'last_archived_date' not in st.session_state:
 
 def update_scores():
     """
-    Calculate today's scores from live results and then add them to the previous cumulative
-    scores from the most recent archive (if available). This produces a running total throughout
-    the tournament.
+    Calculate today's scores from live results and add them to previous cumulative
+    scores from the most recent archive (if available). Also, persist the lost status for teams
+    that were marked lost in any previous archive.
     """
     participants = get_participants()
     team_seeds = get_team_seeds()
     live_results, losers = get_live_results()
+    
+    # Load previous cumulative scores and lost teams.
+    prev_cum, prev_losers = load_previous_cumulative_scores()
     
     # Calculate today's scores for each participant.
     todays_results = {}
@@ -233,24 +250,32 @@ def update_scores():
             current_points = wins * seed_val
             todays_current += current_points
             
+            # Check if the team was marked lost previously.
+            was_lost_before = team in prev_losers.get(participant, set())
+            # If the team lost today or was already lost previously, assign zero potential.
+            # Determine potential points.
             if team in losers:
                 potential_points = 0
+                todays_loss_today = True
             else:
                 potential_points = seed_val * (max_wins - wins)
+                todays_loss_today = False
+            
             todays_max_possible += potential_points
             
-            if team in losers:
+            # Check if the team was marked lost previously.
+            was_lost_before = team in prev_losers.get(participant, set())
+            # If the team lost previously or lost today, mark it as lost.
+            if was_lost_before or todays_loss_today:
                 teams_with_seeds.append(f'(L){team} ({seed})')
             else:
                 teams_with_seeds.append(f"{team} ({seed})")
+                
         todays_results[participant] = {
             "todays_current": todays_current,
             "todays_max": todays_max_possible,
             "teams_str": "\n".join(teams_with_seeds)
         }
-    
-    # Load previous cumulative scores (from the most recent archive before today).
-    prev_cum = load_previous_cumulative_scores()
     
     # Build cumulative results by adding today's scores to the previous cumulative totals.
     rows = []
