@@ -222,68 +222,82 @@ if 'last_archived_date' not in st.session_state:
 
 def update_scores():
     """
-    Calculate today's scores from live results and add them to previous cumulative
-    scores from the most recent archive (if available). Also, persist the lost status for teams
-    that were marked lost in any previous archive.
+    For each participant and each team, load archived team-level data (if available) and combine it
+    with today's results. For each team:
+      - total_wins = archived_wins (default 0) + todays_wins
+      - current_points = total_wins × seed
+      - if the team is lost (either archived or from today's results), the team's max is fixed at current_points;
+        otherwise, its max remains fixed at seed × max_wins.
+    This ensures that the potential max for an active team remains fixed while a lost team’s score is locked in.
     """
     participants = get_participants()
     team_seeds = get_team_seeds()
-    live_results, losers = get_live_results()
+    live_results, losers_today = get_live_results()
     
-    # Load previous cumulative scores and lost teams.
-    prev_cum, prev_losers = load_previous_cumulative_scores()
+    # Load team-level data from the most recent archive (if available).
+    prev_team_data = load_previous_team_data()  # returns {participant: {team: {"wins": x, "lost": bool}}}
     
-    # Calculate today's scores for each participant.
-    todays_results = {}
-    max_wins = 6  # assuming each team can win up to 6 games
+    max_wins = 6  # maximum number of games a team can win in the tournament
+    results = {}           # will hold participant-level totals for display
+    team_details_update = {}  # will hold updated team-level details per participant (as JSON strings)
+    
     for participant, teams in participants.items():
-        todays_current = 0
-        todays_max_possible = 0
-        teams_with_seeds = []
+        part_current = 0
+        part_max = 0
+        teams_display = []
+        team_data_for_participant = {}
+        
         for team in teams:
             seed = team_seeds.get(team, 'N/A')
             try:
                 seed_val = int(seed)
             except Exception:
                 seed_val = 0
-            wins = live_results.get(team, 0)
-            current_points = wins * seed_val
-            todays_current += current_points
             
-            # Check if the team was marked lost previously.
-            was_lost_before = team in prev_losers.get(participant, set())
-            # Determine potential points: zero if the team lost either today or previously.
-            if team in losers or was_lost_before:
-                potential_points = 0
-                todays_loss_today = True
+            # Get archived wins and lost flag (if available); default to 0 wins, not lost.
+            archived = prev_team_data.get(participant, {}).get(team, {"wins": 0, "lost": False})
+            archived_wins = archived.get("wins", 0)
+            archived_lost = archived.get("lost", False)
+            
+            todays_wins = live_results.get(team, 0)
+            # Total wins are the sum of archived wins and today's wins.
+            total_wins = archived_wins + todays_wins
+            
+            # Determine lost status: if the team was marked lost previously or lost today.
+            lost = archived_lost or (team in losers_today)
+            
+            # Current points earned by this team.
+            current_points = total_wins * seed_val
+            
+            # Calculate maximum potential:
+            #   - If lost, the team's score is locked at its current points.
+            #   - If still active, the team's maximum potential remains fixed at seed × max_wins.
+            if lost:
+                team_max = current_points
+                teams_display.append(f"(L){team} ({seed})")
             else:
-                potential_points = seed_val * (max_wins - wins)
-                todays_loss_today = False
+                team_max = seed_val * max_wins
+                teams_display.append(f"{team} ({seed})")
             
-            todays_max_possible += potential_points
+            part_current += current_points
+            part_max += team_max
             
-            # Mark the team as lost if it lost previously or today.
-            if was_lost_before or todays_loss_today:
-                teams_with_seeds.append(f'(L){team} ({seed})')
-            else:
-                teams_with_seeds.append(f"{team} ({seed})")
-                
-        todays_results[participant] = {
-            "todays_current": todays_current,
-            "todays_max": todays_max_possible,
-            "teams_str": "\n".join(teams_with_seeds)
+            # Save updated team-level details.
+            team_data_for_participant[team] = {"wins": total_wins, "lost": lost}
+        
+        results[participant] = {
+            "current": part_current,
+            "max": part_max,
+            "teams_str": "\n".join(teams_display)
         }
+        team_details_update[participant] = json.dumps(team_data_for_participant)
     
-    # Build cumulative results by adding today's scores to the previous cumulative totals.
+    # Build a DataFrame for display.
     rows = []
-    for participant, data in todays_results.items():
-        prev_current, prev_max = prev_cum.get(participant, (0, 0))
-        cumulative_current = prev_current + data["todays_current"]
-        cumulative_max = prev_max + data["todays_max"]
-        score_display = f"{cumulative_current}/{cumulative_max}"
-        rows.append([participant, cumulative_current, cumulative_max, score_display, data["teams_str"]])
+    for participant, data in results.items():
+        score_display = f"{data['current']}/{data['max']}"
+        rows.append([participant, data['current'], data['max'], score_display, data["teams_str"]])
     
-    # Create and sort the DataFrame.
     df = pd.DataFrame(rows, columns=["Participant", "Current Score", "Max Score", "Score/Potential", "Teams (Seeds)"])
     df = df.sort_values(by="Current Score", ascending=False)
     df['Place'] = df['Current Score'].rank(method='min', ascending=False).astype(int)
@@ -291,7 +305,7 @@ def update_scores():
     df = df.sort_values(by=["Place", "Remaining"], ascending=[True, False])
     df.set_index("Place", inplace=True)
     df = df.drop(columns=["Remaining"])
-    return df
+    return df, team_details_update
 
 def display_scoreboard():
     df = update_scores()
