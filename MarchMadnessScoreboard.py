@@ -153,8 +153,49 @@ def archive_scores(df):
     archive_sheet.update("A1", data)
     st.success(f"Scoreboard archived to tab '{today_str}'!")
 
+def load_previous_cumulative_scores():
+    """
+    Scan the Google Sheet for worksheets named with a date (YYYY-MM-DD) that are before today.
+    Returns a dictionary mapping each participant to a tuple (prev_current, prev_max).
+    If no previous archive is found, returns an empty dictionary.
+    """
+    today_str = time.strftime("%Y-%m-%d")
+    prev_date = None
+    prev_sheet = None
+    # Loop through all worksheets in the spreadsheet
+    for ws in spreadsheet.worksheets():
+        title = ws.title
+        # Check if the worksheet title is a date in YYYY-MM-DD format.
+        try:
+            time.strptime(title, "%Y-%m-%d")
+        except Exception:
+            continue  # skip non-date worksheets
+        # Consider only archives from before today
+        if title < today_str:
+            if prev_date is None or title > prev_date:
+                prev_date = title
+                prev_sheet = ws
+    if prev_sheet:
+        records = prev_sheet.get_all_records()
+        cumulative = {}
+        for row in records:
+            participant = row.get("Participant")
+            try:
+                prev_current = float(row.get("Current Score", 0))
+            except:
+                prev_current = 0
+            try:
+                prev_max = float(row.get("Max Score", 0))
+            except:
+                prev_max = 0
+            if participant:
+                cumulative[participant] = (prev_current, prev_max)
+        return cumulative
+    else:
+        return {}
+
 # -----------------------------
-# Streamlit App Display Functions
+# Streamlit App Display Functions (with cumulative scores)
 # -----------------------------
 st.set_page_config(layout="wide")
 st.title("🏀 Guttman Madness Scoreboard 🏆")
@@ -163,18 +204,24 @@ st.write("Scores update automatically every minute. Each win gives points equal 
 if 'last_updated' not in st.session_state:
     st.session_state['last_updated'] = time.time()
 if 'last_archived_date' not in st.session_state:
-    st.session_state['last_archived_date'] = ""  # To track the last day an archive was done
+    st.session_state['last_archived_date'] = ""  # to track if today's archive has been done
 
 def update_scores():
+    """
+    Calculate today's scores from live results and then add them to the previous cumulative
+    scores from the most recent archive (if available). This produces a running total throughout
+    the tournament.
+    """
     participants = get_participants()
     team_seeds = get_team_seeds()
     live_results, losers = get_live_results()
     
-    scores = []
+    # Calculate today's scores for each participant.
+    todays_results = {}
     max_wins = 6  # assuming each team can win up to 6 games
     for participant, teams in participants.items():
-        current_score = 0
-        potential_remaining = 0
+        todays_current = 0
+        todays_max_possible = 0
         teams_with_seeds = []
         for team in teams:
             seed = team_seeds.get(team, 'N/A')
@@ -184,25 +231,38 @@ def update_scores():
                 seed_val = 0
             wins = live_results.get(team, 0)
             current_points = wins * seed_val
-            current_score += current_points
+            todays_current += current_points
             
             if team in losers:
                 potential_points = 0
             else:
                 potential_points = seed_val * (max_wins - wins)
-            potential_remaining += potential_points
+            todays_max_possible += potential_points
             
             if team in losers:
                 teams_with_seeds.append(f'(L){team} ({seed})')
             else:
                 teams_with_seeds.append(f"{team} ({seed})")
-
-        max_possible = current_score + potential_remaining
-        score_display = f"{current_score}/{max_possible}"
-        teams_with_seeds_str = "\n".join(teams_with_seeds)
-        scores.append([participant, current_score, max_possible, score_display, teams_with_seeds_str])
+        todays_results[participant] = {
+            "todays_current": todays_current,
+            "todays_max": todays_max_possible,
+            "teams_str": "\n".join(teams_with_seeds)
+        }
     
-    df = pd.DataFrame(scores, columns=["Participant", "Current Score", "Max Score", "Score/Potential", "Teams (Seeds)"])
+    # Load previous cumulative scores (from the most recent archive before today).
+    prev_cum = load_previous_cumulative_scores()
+    
+    # Build cumulative results by adding today's scores to the previous cumulative totals.
+    rows = []
+    for participant, data in todays_results.items():
+        prev_current, prev_max = prev_cum.get(participant, (0, 0))
+        cumulative_current = prev_current + data["todays_current"]
+        cumulative_max = prev_max + data["todays_max"]
+        score_display = f"{cumulative_current}/{cumulative_max}"
+        rows.append([participant, cumulative_current, cumulative_max, score_display, data["teams_str"]])
+    
+    # Create and sort the DataFrame.
+    df = pd.DataFrame(rows, columns=["Participant", "Current Score", "Max Score", "Score/Potential", "Teams (Seeds)"])
     df = df.sort_values(by="Current Score", ascending=False)
     df['Place'] = df['Current Score'].rank(method='min', ascending=False).astype(int)
     df['Remaining'] = df["Max Score"] - df["Current Score"]
@@ -221,7 +281,7 @@ def display_scoreboard():
         ax.barh(df["Participant"], df["Max Score"], color='lightgrey')
         ax.barh(df["Participant"], df["Current Score"], color='green')
         ax.set_xlabel("Points")
-        ax.set_title("March Madness PickX Progress")
+        ax.set_title("March Madness PickX Progress (Cumulative)")
         max_val = df["Max Score"].max() if not df["Max Score"].empty else 1
         ax.set_xlim(0, max_val)
         ax.invert_yaxis()
@@ -234,10 +294,10 @@ def display_scoreboard():
 df = display_scoreboard()
 
 # --- Auto-Archive Logic ---
-# Get current time in 24-hour format and current date.
+# Get current time (24-hour format) and current date.
 current_time = time.strftime("%H:%M")
 current_date = time.strftime("%Y-%m-%d")
-# Check if it's 11:58 PM and if we haven't already archived today.
+# Check if it's 11:58 PM and if we haven't archived today.
 if current_time == "23:58" and st.session_state.get("last_archived_date") != current_date:
     archive_scores(df)
     st.session_state["last_archived_date"] = current_date
@@ -251,4 +311,3 @@ for i in range(60, 0, -1):
     time.sleep(1)
 st.session_state['last_updated'] = time.time()
 st.rerun()
-
